@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+
+# PlatformIO
+firmware/.pio/
+
+# Swift Package Manager and Xcode
+mac/TeamsLight/.build/
+mac/TeamsLight/DerivedData/
+mac/TeamsLight/TeamsLight.xcodeproj/xcuserdata/
+mac/TeamsLight/TeamsLight.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcuserstate

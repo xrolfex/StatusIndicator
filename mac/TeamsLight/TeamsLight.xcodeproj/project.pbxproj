@@ -1,0 +1,324 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 71;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		100000000000000000000001 /* Sources/App/TeamsLightApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000001 /* Sources/App/TeamsLightApp.swift */; };
+		100000000000000000000002 /* Sources/Models/PresenceState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000002 /* Sources/Models/PresenceState.swift */; };
+		100000000000000000000003 /* Sources/Presence/LocalPresenceProviders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000003 /* Sources/Presence/LocalPresenceProviders.swift */; };
+		100000000000000000000004 /* Sources/Presence/PresenceResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000004 /* Sources/Presence/PresenceResolver.swift */; };
+		100000000000000000000005 /* Sources/Serial/SerialTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000005 /* Sources/Serial/SerialTransport.swift */; };
+		100000000000000000000006 /* Sources/Serial/USBCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000006 /* Sources/Serial/USBCommand.swift */; };
+		100000000000000000000007 /* Tests/PresenceResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000007 /* Tests/PresenceResolverTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		0707F2143036263A0070CB6C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 800000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 500000000000000000000001;
+			remoteInfo = TeamsLight;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		200000000000000000000001 /* Sources/App/TeamsLightApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/App/TeamsLightApp.swift; sourceTree = SOURCE_ROOT; };
+		200000000000000000000002 /* Sources/Models/PresenceState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Models/PresenceState.swift; sourceTree = SOURCE_ROOT; };
+		200000000000000000000003 /* Sources/Presence/LocalPresenceProviders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Presence/LocalPresenceProviders.swift; sourceTree = SOURCE_ROOT; };
+		200000000000000000000004 /* Sources/Presence/PresenceResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Presence/PresenceResolver.swift; sourceTree = SOURCE_ROOT; };
+		200000000000000000000005 /* Sources/Serial/SerialTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Serial/SerialTransport.swift; sourceTree = SOURCE_ROOT; };
+		200000000000000000000006 /* Sources/Serial/USBCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Serial/USBCommand.swift; sourceTree = SOURCE_ROOT; };
+		200000000000000000000007 /* Tests/PresenceResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/PresenceResolverTests.swift; sourceTree = SOURCE_ROOT; };
+		200000000000000000000008 /* Resources/Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Resources/Info.plist; sourceTree = SOURCE_ROOT; };
+		200000000000000000000009 /* TeamsLight.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TeamsLight.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		20000000000000000000000A /* TeamsLightTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TeamsLightTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		300000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		300000000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		400000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				400000000000000000000002 /* Sources */,
+				400000000000000000000003 /* Tests */,
+				400000000000000000000004 /* Resources */,
+				400000000000000000000005 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		400000000000000000000002 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000001 /* Sources/App/TeamsLightApp.swift */,
+				200000000000000000000002 /* Sources/Models/PresenceState.swift */,
+				200000000000000000000003 /* Sources/Presence/LocalPresenceProviders.swift */,
+				200000000000000000000004 /* Sources/Presence/PresenceResolver.swift */,
+				200000000000000000000005 /* Sources/Serial/SerialTransport.swift */,
+				200000000000000000000006 /* Sources/Serial/USBCommand.swift */,
+			);
+			name = Sources;
+			sourceTree = "<group>";
+		};
+		400000000000000000000003 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000007 /* Tests/PresenceResolverTests.swift */,
+			);
+			name = Tests;
+			sourceTree = "<group>";
+		};
+		400000000000000000000004 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000008 /* Resources/Info.plist */,
+			);
+			name = Resources;
+			sourceTree = "<group>";
+		};
+		400000000000000000000005 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000009 /* TeamsLight.app */,
+				20000000000000000000000A /* TeamsLightTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		500000000000000000000001 /* TeamsLight */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 600000000000000000000002 /* Build configuration list for PBXNativeTarget "TeamsLight" */;
+			buildPhases = (
+				300000000000000000000003 /* Sources */,
+				300000000000000000000001 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TeamsLight;
+			productName = TeamsLight;
+			productReference = 200000000000000000000009 /* TeamsLight.app */;
+			productType = "com.apple.product-type.application";
+		};
+		500000000000000000000002 /* TeamsLightTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 600000000000000000000003 /* Build configuration list for PBXNativeTarget "TeamsLightTests" */;
+			buildPhases = (
+				300000000000000000000004 /* Sources */,
+				300000000000000000000002 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				700000000000000000000001 /* PBXTargetDependency */,
+			);
+			name = TeamsLightTests;
+			productName = TeamsLightTests;
+			productReference = 20000000000000000000000A /* TeamsLightTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		800000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					500000000000000000000001 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					500000000000000000000002 = {
+						CreatedOnToolsVersion = 26.0;
+						TestTargetID = 500000000000000000000001;
+					};
+				};
+			};
+			buildConfigurationList = 600000000000000000000001 /* Build configuration list for PBXProject "TeamsLight" */;
+			compatibilityVersion = "Xcode 16.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 400000000000000000000001;
+			productRefGroup = 400000000000000000000005 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				500000000000000000000001 /* TeamsLight */,
+				500000000000000000000002 /* TeamsLightTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		300000000000000000000003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000001 /* Sources/App/TeamsLightApp.swift in Sources */,
+				100000000000000000000002 /* Sources/Models/PresenceState.swift in Sources */,
+				100000000000000000000003 /* Sources/Presence/LocalPresenceProviders.swift in Sources */,
+				100000000000000000000004 /* Sources/Presence/PresenceResolver.swift in Sources */,
+				100000000000000000000005 /* Sources/Serial/SerialTransport.swift in Sources */,
+				100000000000000000000006 /* Sources/Serial/USBCommand.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		300000000000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000007 /* Tests/PresenceResolverTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		700000000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 500000000000000000000001 /* TeamsLight */;
+			targetProxy = 0707F2143036263A0070CB6C /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		900000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		900000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		900000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_TESTABILITY = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Resources/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.TeamsLight;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		900000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Resources/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.TeamsLight;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		900000000000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.TeamsLightTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TeamsLight.app/Contents/MacOS/TeamsLight";
+			};
+			name = Debug;
+		};
+		900000000000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.TeamsLightTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TeamsLight.app/Contents/MacOS/TeamsLight";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		600000000000000000000001 /* Build configuration list for PBXProject "TeamsLight" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				900000000000000000000001 /* Debug */,
+				900000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		600000000000000000000002 /* Build configuration list for PBXNativeTarget "TeamsLight" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				900000000000000000000003 /* Debug */,
+				900000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		600000000000000000000003 /* Build configuration list for PBXNativeTarget "TeamsLightTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				900000000000000000000005 /* Debug */,
+				900000000000000000000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 800000000000000000000001 /* Project object */;
+}

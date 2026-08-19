@@ -1,0 +1,24 @@
+{
+  "configurations": [
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:TeamsSensor}/mac/TeamsLight",
+      "name": "Debug TeamsLight (mac/TeamsLight)",
+      "target": "TeamsLight",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug TeamsLight (mac/TeamsLight)"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:TeamsSensor}/mac/TeamsLight",
+      "name": "Release TeamsLight (mac/TeamsLight)",
+      "target": "TeamsLight",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release TeamsLight (mac/TeamsLight)"
+    }
+  ]
+}
