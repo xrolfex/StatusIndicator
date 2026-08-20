@@ -1,6 +1,8 @@
 # TeamsLight macOS agent
 
-Native SwiftUI menu-bar app for macOS 13+. Build with `swift build -c release`; no runtime installation is necessary. `scripts/package-app.sh` creates `.build/TeamsLight.app`; setting `TEAMSLIGHT_SIGNING_IDENTITY` signs it with a Developer ID Application identity. Notarize the resulting app through the organization’s normal release pipeline before broad distribution. The included `TeamsLight.xcodeproj` opens the app and test targets directly in Xcode.
+Native SwiftUI menu-bar app for macOS 13+. The shared **TeamsLight Production** Xcode scheme uses the Release configuration for running, profiling, analyzing, and archiving while keeping unit tests on Debug. In Xcode, select that scheme and choose **Product → Archive** to create a desktop-distribution archive.
+
+Run `scripts/package-app.sh` to create `.build/TeamsLight.xcarchive` and copy its Xcode-built application to `.build/TeamsLight.app`. Setting `TEAMSLIGHT_SIGNING_IDENTITY` signs the archived app with a Developer ID Application identity. Notarize the signed app through the organization’s normal release pipeline before broad distribution.
 
 The app uses `SMAppService.mainApp` for the optional Start at Login switch. It emits privacy-safe lifecycle events to the unified log under subsystem `com.example.TeamsLight`; inspect with Console or `log show --predicate 'subsystem == "com.example.TeamsLight"'`.
 

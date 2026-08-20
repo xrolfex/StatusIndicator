@@ -1,10 +1,10 @@
 # Status Indicator
 
-A private, USB-only macOS status light for Microsoft Teams. It drives either a Waveshare ESP32-S3-Matrix, a supported Kuando/Plenom Busylight, or both at the same time.
+A private, USB-only macOS status light for Microsoft Teams. It drives a Waveshare ESP32-S3-Matrix, an ESP32-WROOM-32D with an external WS2812B-64 matrix, a supported Kuando/Plenom Busylight, or an ESP32 and Busylight at the same time.
 
 The project contains two pieces:
 
-- `firmware/` — PlatformIO/Arduino firmware for the Waveshare ESP32-S3-Matrix (64 RGB LEDs on GPIO 14), exposed as native USB CDC serial.
+- `firmware/` — shared PlatformIO/Arduino firmware for the Waveshare ESP32-S3-Matrix and ESP32-WROOM-32D with an external 8×8 WS2812B matrix.
 - `mac/TeamsLight/` — a native macOS 13+ SwiftUI menu-bar app, with an Xcode project and tests. It controls the ESP32 over serial and Busylights over HID, without a vendor SDK or driver.
 
 Neither component uses Wi-Fi or Bluetooth. The ESP32 starts with its LEDs off and only changes when commanded by the Mac app.
@@ -40,10 +40,23 @@ Build and upload with the board connected:
 
 ```sh
 cd firmware
-pio run -t upload
+pio run -e waveshare_esp32_s3_matrix -t upload
 ```
 
 PlatformIO normally finds `/dev/cu.usbmodem*` automatically. If it cannot enter the bootloader, hold **BOOT**, press and release **RESET**, then release **BOOT** and run the command again.
+
+### ESP32-WROOM-32D with WS2812B-64
+
+Connect a standard 8×8 WS2812B-64 panel to GPIO 16 using a common ground, a 330–470 Ω series data resistor, and a separate regulated 5 V supply. A logic-level shifter and a roughly 1000 µF supply capacitor are recommended. Do not power the matrix from the ESP32 3.3 V pin.
+
+Build and upload the WROOM target with:
+
+```sh
+cd firmware
+pio run -e esp32_wroom_32d_ws2812b_64 -t upload
+```
+
+This target uses the common GRB, serpentine matrix layout. Its USB-to-UART bridge may appear as `cu.usbserial`, `cu.SLAB_USBtoUART`, or `cu.wchusbserial`; the Mac app recognizes and verifies each using the same serial protocol.
 
 ### Kuando / Plenom Busylight
 
@@ -51,7 +64,7 @@ The macOS app automatically recognizes supported legacy Kuando devices (vendor I
 
 ## macOS app
 
-Open [TeamsLight.xcodeproj](mac/TeamsLight/TeamsLight.xcodeproj) in Xcode. Select the **TeamsLight** scheme, choose **My Mac**, then Build and Run. The **TeamsLightTests** target can be run with Product → Test.
+Open [TeamsLight.xcodeproj](mac/TeamsLight/TeamsLight.xcodeproj) in Xcode. Use the **TeamsLight** scheme for development. For a desktop-distribution build, select the shared **TeamsLight Production** scheme and choose **Product → Archive**. Its run, profile, analyze, and archive actions use Release; unit tests remain on Debug.
 
 From the command line:
 
@@ -59,7 +72,10 @@ From the command line:
 cd mac/TeamsLight
 swift test
 swift build -c release
+scripts/package-app.sh
 ```
+
+The packaging script creates `.build/TeamsLight.xcarchive` and `.build/TeamsLight.app` from the production Xcode scheme. Set `TEAMSLIGHT_SIGNING_IDENTITY` to a Developer ID Application identity to sign the app before notarization.
 
 The menu-bar popover includes:
 

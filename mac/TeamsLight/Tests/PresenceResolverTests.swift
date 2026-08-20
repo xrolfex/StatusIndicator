@@ -59,4 +59,12 @@ final class PresenceResolverTests: XCTestCase {
         XCTAssertFalse(transport.isConnected)
         XCTAssertNil(transport.deviceName)
     }
+    func testUSBSerialCandidateNamesCoverNativeAndBridgeDevices() {
+        XCTAssertTrue(USBSerialTransport.isCandidateDeviceName("cu.usbmodem2101"))
+        XCTAssertTrue(USBSerialTransport.isCandidateDeviceName("cu.usbserial-0001"))
+        XCTAssertTrue(USBSerialTransport.isCandidateDeviceName("cu.SLAB_USBtoUART"))
+        XCTAssertTrue(USBSerialTransport.isCandidateDeviceName("cu.wchusbserial1420"))
+        XCTAssertFalse(USBSerialTransport.isCandidateDeviceName("tty.usbserial-0001"))
+        XCTAssertFalse(USBSerialTransport.isCandidateDeviceName("cu.Bluetooth-Incoming-Port"))
+    }
 }

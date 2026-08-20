@@ -3,19 +3,33 @@ set -euo pipefail
 
 script_dir="${0:A:h}"
 project_dir="${script_dir:h}"
+project_path="${project_dir}/TeamsLight.xcodeproj"
+scheme="TeamsLight Production"
+archive_path="${project_dir}/.build/TeamsLight.xcarchive"
 output_dir="${project_dir}/.build/TeamsLight.app"
+archived_app="${archive_path}/Products/Applications/TeamsLight.app"
 
-cd "$project_dir"
-swift build -c release
-rm -rf "$output_dir"
-mkdir -p "$output_dir/Contents/MacOS"
-cp "$project_dir/.build/release/TeamsLight" "$output_dir/Contents/MacOS/TeamsLight"
-cp "$project_dir/Resources/Info.plist" "$output_dir/Contents/Info.plist"
+mkdir -p "${project_dir}/.build"
+rm -rf "$archive_path" "$output_dir"
+
+xcodebuild \
+  -project "$project_path" \
+  -scheme "$scheme" \
+  -destination "generic/platform=macOS" \
+  -archivePath "$archive_path" \
+  -quiet \
+  CODE_SIGNING_ALLOWED=NO \
+  archive
 
 if [[ -n "${TEAMSLIGHT_SIGNING_IDENTITY:-}" ]]; then
-  codesign --force --options runtime --timestamp --sign "$TEAMSLIGHT_SIGNING_IDENTITY" "$output_dir"
-  echo "Signed $output_dir"
+  codesign --force --options runtime --timestamp --sign "$TEAMSLIGHT_SIGNING_IDENTITY" "$archived_app"
+  codesign --verify --deep --strict "$archived_app"
+  echo "Signed $archived_app"
 else
-  echo "Created unsigned $output_dir"
+  echo "Created unsigned $archived_app"
   echo "Set TEAMSLIGHT_SIGNING_IDENTITY to a Developer ID Application identity to sign it."
 fi
+
+ditto "$archived_app" "$output_dir"
+echo "Archive: $archive_path"
+echo "Application: $output_dir"

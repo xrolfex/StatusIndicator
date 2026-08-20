@@ -1,5 +1,6 @@
 #pragma once
 #include <Adafruit_NeoPixel.h>
+#include "board_config.h"
 #include "presence_state.h"
 
 class LedController {
@@ -16,8 +17,7 @@ class LedController {
   void update(uint32_t nowMs);
 
  private:
-  // The Waveshare ESP32-S3-Matrix's onboard 8x8 LEDs use RGB byte order.
-  Adafruit_NeoPixel pixels_{LED_COUNT, LED_DATA_PIN, NEO_RGB + NEO_KHZ800};
+  Adafruit_NeoPixel pixels_{LED_COUNT, LED_DATA_PIN, LED_COLOR_ORDER + NEO_KHZ800};
   PresenceState state_ = PresenceState::OFFLINE;
   uint8_t brightnessPercent_ = 15;
   bool diagnostic_ = false;

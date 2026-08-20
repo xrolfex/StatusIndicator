@@ -12,7 +12,27 @@ uint8_t wave(uint32_t now, uint32_t periodMs, uint8_t low, uint8_t high) {
 }
 
 void LedController::begin() { pixels_.begin(); pixels_.clear(); pixels_.show(); }
-uint16_t LedController::pixelIndex(uint8_t row, uint8_t column) const { return row * 8 + column; }
+uint16_t LedController::pixelIndex(uint8_t row, uint8_t column) const {
+  uint8_t physicalRow;
+  uint8_t physicalColumn;
+#if MATRIX_ROTATION == 0
+  physicalRow = row;
+  physicalColumn = column;
+#elif MATRIX_ROTATION == 90
+  physicalRow = column;
+  physicalColumn = MATRIX_WIDTH - 1 - row;
+#elif MATRIX_ROTATION == 180
+  physicalRow = MATRIX_HEIGHT - 1 - row;
+  physicalColumn = MATRIX_WIDTH - 1 - column;
+#else
+  physicalRow = MATRIX_HEIGHT - 1 - column;
+  physicalColumn = row;
+#endif
+#if MATRIX_SERPENTINE
+  if (physicalRow % 2 != 0) physicalColumn = MATRIX_WIDTH - 1 - physicalColumn;
+#endif
+  return physicalRow * MATRIX_WIDTH + physicalColumn;
+}
 void LedController::setState(PresenceState state) { state_ = state; diagnostic_ = false; }
 void LedController::setBrightness(uint8_t percent) { brightnessPercent_ = std::min(percent, kMaxBrightness); }
 void LedController::setDiagnosticColor(uint8_t r, uint8_t g, uint8_t b) { diagnostic_ = true; render(r, g, b); }
@@ -21,8 +41,7 @@ void LedController::showFiveThird() {
   static constexpr uint8_t kFive[] = {0b111, 0b100, 0b111, 0b001, 0b111};
   static constexpr uint8_t kThree[] = {0b111, 0b001, 0b111, 0b001, 0b111};
   const auto setPixel = [this](uint8_t row, uint8_t col, uint32_t color) {
-    // The Waveshare matrix is mounted 180 degrees from the logical USB orientation.
-    pixels_.setPixelColor(pixelIndex(7 - row, 7 - col), color);
+    pixels_.setPixelColor(pixelIndex(row, col), color);
   };
   pixels_.clear();
   for (uint8_t row = 0; row < 5; ++row) {
@@ -44,8 +63,8 @@ void LedController::test() { diagnostic_ = true; render(255, 255, 255, 80); }
 
 void LedController::render(uint8_t r, uint8_t g, uint8_t b, uint8_t scale) {
   const uint16_t factor = uint16_t(brightnessPercent_) * scale / 100;
-  for (uint8_t row = 0; row < 8; ++row)
-    for (uint8_t col = 0; col < 8; ++col)
+  for (uint8_t row = 0; row < MATRIX_HEIGHT; ++row)
+    for (uint8_t col = 0; col < MATRIX_WIDTH; ++col)
       pixels_.setPixelColor(pixelIndex(row, col), pixels_.Color(uint16_t(r) * factor / 255, uint16_t(g) * factor / 255, uint16_t(b) * factor / 255));
   pixels_.show();
 }
