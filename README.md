@@ -1,49 +1,108 @@
-# Teams Sensor
+# Status Indicator
 
-USB-only Microsoft Teams presence light for a Waveshare ESP32-S3-Matrix and macOS.
+A private, USB-only macOS status light for Microsoft Teams. It drives either a Waveshare ESP32-S3-Matrix, a supported Kuando/Plenom Busylight, or both at the same time.
 
-* `firmware/` is a PlatformIO/Arduino firmware project. It exposes the ESP32-S3's native USB CDC serial port and never starts Wi-Fi or Bluetooth.
-* `mac/TeamsLight/` is a native SwiftUI menu-bar app. It drives the ESP32 through POSIX serial I/O and compatible Kuando Busylights through macOS IOKit HID; it has no runtime dependency on Python, Node, Homebrew, Arduino, ESP-IDF, or the Kuando SDK.
+The project contains two pieces:
 
-The light intentionally begins **OFF** after boot and only changes state when its USB host supplies a command.
+- `firmware/` — PlatformIO/Arduino firmware for the Waveshare ESP32-S3-Matrix (64 RGB LEDs on GPIO 14), exposed as native USB CDC serial.
+- `mac/TeamsLight/` — a native macOS 13+ SwiftUI menu-bar app, with an Xcode project and tests. It controls the ESP32 over serial and Busylights over HID, without a vendor SDK or driver.
 
-## Quick start
+Neither component uses Wi-Fi or Bluetooth. The ESP32 starts with its LEDs off and only changes when commanded by the Mac app.
 
-1. Flash `firmware` from a development machine: `cd firmware && pio run -t upload`.
-2. Build the Mac app on the target Mac: `cd mac/TeamsLight && swift build -c release`.
-3. Package/sign/notarize the resulting `TeamsLight` executable as your organization requires, then run it. Normal operation needs no administrator privileges or third-party driver.
+## What it shows
 
-The agent discovers `/dev/cu.*` candidates and verifies an ESP32 board by `PING`/`PONG`; it does not bind to a hard-coded device path. It also discovers supported Kuando/Plenom Busylight HID devices automatically. Both outputs may be connected at once and receive the same state. USB reconnects, sleep/wake, and temporary write failures cause automatic rediscovery.
+The app resolves local, privacy-preserving signals into a presence state. You can also select a manual state from the menu-bar popover.
 
-## Kuando Busylight support
+| State | ESP32 / Busylight color |
+| --- | --- |
+| Available | Green |
+| Busy, in a call, or in a meeting | Red |
+| Do Not Disturb | Purple |
+| Presenting | Purple pulse (ESP32) |
+| Away | Orange |
+| Offline | Off |
 
-The macOS app supports the standard HID color output used by Kuando/Plenom Busylight Alpha and Omega families, including legacy devices with USB vendor ID `04D8` and current recognized Plenom IDs (`27BB:3BCA` through `27BB:3BCF`). No vendor driver is installed or bundled. Plug the Busylight in and relaunch the app (or wait for its next refresh); Diagnostics will name it when detected.
+The default automatic signals are Teams running, active microphone input, active camera use, and macOS idle time. The app does not read Teams databases, UI, tokens, chat, meeting subjects, or audio. Microphone detection observes CoreAudio input-device activity—it does not capture or inspect sound—and Teams attribution is intentionally an inference of “Teams is running + an input is active.” Diagnostics explains each current source.
 
-## Detection and privacy
+## Hardware
 
-The default local signals are deliberately conservative:
+### Waveshare ESP32-S3-Matrix
 
-* CoreAudio input-device activity: an active input while Teams is running resolves to `IN_CALL`; an active input otherwise resolves to `BUSY`.
-* CoreMediaIO camera-device activity resolves to `BUSY`.
-* Teams running is observable through `NSWorkspace`, but no unstable client database, token, accessibility scraping, meeting subject, audio, or chat data is read.
-* User idle time resolves to `AWAY` after five minutes when no higher-priority signal exists.
+This firmware targets Waveshare SKU 27119. Its 8×8 WS2812-compatible matrix is wired to GPIO 14. The firmware caps brightness at 15% to stay within the board’s thermal/power guidance.
 
-macOS may require the user to grant Camera permission for the camera probe, and enterprise MDM can restrict USB serial access. The agent does not bypass either control. Microphone activity uses CoreAudio device state and does **not** capture, record, or inspect audio; macOS does not offer a general, supported public API that reliably attributes arbitrary microphone use to a particular application. Consequently Teams attribution is an inference from “Teams running + input active”, shown as such in Diagnostics.
+Install PlatformIO if needed:
 
-Microsoft Graph is deliberately not implemented as a required path. If added, put it behind `PresenceProvider`; it would need an Entra app registration and delegated `Presence.Read` (or other tenant-approved presence permission), which frequently needs admin consent and introduces token handling.
+```sh
+brew install platformio
+```
 
-## Board details
+Build and upload with the board connected:
 
-The target is Waveshare SKU 27119. Waveshare's Arduino example specifies `PIN_NEOPIXEL 14`; the matrix is 64 chained WS2812-compatible RGB LEDs. This project uses GPIO 14 and progressive index order. If a production batch has a different physical orientation, change `LedController::pixelIndex` only—state colors are matrix-wide, so orientation has no visible effect today. Keep brightness low: Waveshare warns against high LED brightness; firmware clamps the default/max to 15% unless changed at build time.
+```sh
+cd firmware
+pio run -t upload
+```
 
-Sources: [Waveshare board documentation](https://docs.waveshare.com/ESP32-S3-Matrix), [Waveshare Arduino example](https://www.waveshare.com/wiki/ESP32-S3-Matrix).
+PlatformIO normally finds `/dev/cu.usbmodem*` automatically. If it cannot enter the bootloader, hold **BOOT**, press and release **RESET**, then release **BOOT** and run the command again.
 
-## Protocol
+### Kuando / Plenom Busylight
 
-Newline-delimited UTF-8 commands: `AVAILABLE`, `BUSY`, `IN_CALL`, `IN_MEETING`, `DND`, `PRESENTING`, `AWAY`, `OFFLINE`, `UNKNOWN`, `PING`, `STATUS`, `BRIGHTNESS 0..15`, `COLOR R G B`, `TEST`, and `OFF`.
+The macOS app automatically recognizes supported legacy Kuando devices (vendor ID `04D8`) and Plenom Busylight models `27BB:3BCA` through `27BB:3BCF`, including Busylight Omega. It sends the standard 64-byte HID output report directly through IOKit; no Kuando package, driver, or SDK is needed.
 
-Responses are `PONG`, `OK ...`, or `ERR ...`. `COLOR` is a temporary solid-color diagnostic mode; a subsequent state command restores state rendering.
+## macOS app
 
-## Distribution
+Open [TeamsLight.xcodeproj](mac/TeamsLight/TeamsLight.xcodeproj) in Xcode. Select the **TeamsLight** scheme, choose **My Mac**, then Build and Run. The **TeamsLightTests** target can be run with Product → Test.
 
-For a corporate deployment, archive a Release `.app` in Xcode (or wrap this Swift package in the supplied app target), sign it with the organization’s Developer ID/Application certificate, notarize it if required, and distribute through the organization’s approved MDM/software channel. The code requests no elevated privileges. Start at Login uses `SMAppService` on macOS 13+.
+From the command line:
+
+```sh
+cd mac/TeamsLight
+swift test
+swift build -c release
+```
+
+The menu-bar popover includes:
+
+- Automatic or manual presence selection.
+- Brightness control.
+- A settings menu for choosing **ESP32**, **Busylight**, or **Both**.
+- Diagnostics and a Test Lights sequence (tests every selected output).
+- Optional Start at Login.
+- A hidden-style **5/3 Matrix Mode**, available when ESP32 output is selected. It displays a low-brightness, 180°-oriented 5/3 mark on the matrix while all other LEDs remain off. Turning it off restores ordinary presence indication.
+
+The app reconnects USB devices after sleep/wake and transient disconnects. Camera access may require macOS permission and can be restricted by MDM.
+
+## Firmware protocol
+
+The ESP32 accepts newline-delimited UTF-8 serial commands:
+
+```text
+AVAILABLE  BUSY  IN_CALL  IN_MEETING  DND  PRESENTING  AWAY  OFFLINE  UNKNOWN
+PING  STATUS  BRIGHTNESS 0..15  COLOR R G B  TEST  FIVE_THREE  OFF
+```
+
+It responds with `PONG`, `OK …`, or `ERR …`. `COLOR` and `TEST` are temporary diagnostic modes; a normal state command restores presence rendering. `FIVE_THREE` displays the special matrix mark.
+
+## Development and verification
+
+Firmware compilation/upload:
+
+```sh
+cd firmware
+pio run
+pio run -t upload
+```
+
+macOS app tests:
+
+```sh
+cd mac/TeamsLight
+swift test
+```
+
+For distribution, archive the Xcode app, sign it with your Developer ID certificate, and notarize it according to your organization’s release process. The app requests no elevated privileges.
+
+## Sources
+
+- [Waveshare ESP32-S3-Matrix documentation](https://docs.waveshare.com/ESP32-S3-Matrix)
+- [Waveshare Arduino example](https://www.waveshare.com/wiki/ESP32-S3-Matrix)
