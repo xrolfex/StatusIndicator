@@ -36,6 +36,7 @@ void SerialProtocol::handle(Stream& serial, char* line) {
   if (!strcmp(line, "STATUS")) { serial.printf("OK %s BRIGHTNESS %u\n", presenceName(leds_.state()), leds_.brightness()); return; }
   if (!strcmp(line, "OFF")) { leds_.off(); reply(serial, "OK OFF"); return; }
   if (!strcmp(line, "TEST")) { leds_.test(); reply(serial, "OK TEST"); return; }
+  if (!strcmp(line, "FIVE_THREE")) { leds_.showFiveThird(); reply(serial, "OK FIVE_THREE"); return; }
   int value, r, g, b; char extra;
   if (sscanf(line, "BRIGHTNESS %d %c", &value, &extra) >= 1) {
     if (sscanf(line, "BRIGHTNESS %d %c", &value, &extra) != 1) { reply(serial, "ERR MALFORMED_COMMAND"); return; }

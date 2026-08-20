@@ -3,7 +3,7 @@
 USB-only Microsoft Teams presence light for a Waveshare ESP32-S3-Matrix and macOS.
 
 * `firmware/` is a PlatformIO/Arduino firmware project. It exposes the ESP32-S3's native USB CDC serial port and never starts Wi-Fi or Bluetooth.
-* `mac/TeamsLight/` is a native SwiftUI menu-bar app. It uses local activity signals and POSIX serial I/O; it has no runtime dependency on Python, Node, Homebrew, Arduino, or ESP-IDF.
+* `mac/TeamsLight/` is a native SwiftUI menu-bar app. It drives the ESP32 through POSIX serial I/O and compatible Kuando Busylights through macOS IOKit HID; it has no runtime dependency on Python, Node, Homebrew, Arduino, ESP-IDF, or the Kuando SDK.
 
 The light intentionally begins **OFF** after boot and only changes state when its USB host supplies a command.
 
@@ -13,14 +13,18 @@ The light intentionally begins **OFF** after boot and only changes state when it
 2. Build the Mac app on the target Mac: `cd mac/TeamsLight && swift build -c release`.
 3. Package/sign/notarize the resulting `TeamsLight` executable as your organization requires, then run it. Normal operation needs no administrator privileges or third-party driver.
 
-The agent discovers `/dev/cu.*` candidates and verifies a board by `PING`/`PONG`; it does not bind to a hard-coded device path. USB reconnects, sleep/wake, and temporary write failures cause automatic rediscovery.
+The agent discovers `/dev/cu.*` candidates and verifies an ESP32 board by `PING`/`PONG`; it does not bind to a hard-coded device path. It also discovers supported Kuando/Plenom Busylight HID devices automatically. Both outputs may be connected at once and receive the same state. USB reconnects, sleep/wake, and temporary write failures cause automatic rediscovery.
+
+## Kuando Busylight support
+
+The macOS app supports the standard HID color output used by Kuando/Plenom Busylight Alpha and Omega families, including legacy devices with USB vendor ID `04D8` and current recognized Plenom IDs (`27BB:3BCA` through `27BB:3BCF`). No vendor driver is installed or bundled. Plug the Busylight in and relaunch the app (or wait for its next refresh); Diagnostics will name it when detected.
 
 ## Detection and privacy
 
 The default local signals are deliberately conservative:
 
 * CoreAudio input-device activity: an active input while Teams is running resolves to `IN_CALL`; an active input otherwise resolves to `BUSY`.
-* AVFoundation camera-in-use resolves to `BUSY`.
+* CoreMediaIO camera-device activity resolves to `BUSY`.
 * Teams running is observable through `NSWorkspace`, but no unstable client database, token, accessibility scraping, meeting subject, audio, or chat data is read.
 * User idle time resolves to `AWAY` after five minutes when no higher-priority signal exists.
 

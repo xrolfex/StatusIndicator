@@ -10,6 +10,7 @@ class LedController {
   uint8_t brightness() const { return brightnessPercent_; }
   PresenceState state() const { return state_; }
   void setDiagnosticColor(uint8_t red, uint8_t green, uint8_t blue);
+  void showFiveThird();
   void test();
   void off();
   void update(uint32_t nowMs);

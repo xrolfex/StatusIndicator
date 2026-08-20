@@ -23,8 +23,6 @@ struct TeamsLightPopover: View {
             Divider()
             PresenceOverrideSection(controller: controller)
             BrightnessSection(controller: controller)
-            Divider()
-            QuickActionsSection(controller: controller)
         }
         .padding()
         .frame(width: 320)
@@ -44,13 +42,28 @@ struct StatusHeader: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(controller.displayTitle)
                     .font(.headline)
-                Text(deviceDescription)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
             }
             Spacer()
             Menu {
+                Picker("Output", selection: $controller.outputDestination) {
+                    ForEach(OutputDestination.allCases) { destination in
+                        Text(destination.title).tag(destination)
+                    }
+                }
+                Divider()
+                Button {
+                    controller.test()
+                } label: {
+                    Label("Test Lights", systemImage: "lightbulb")
+                }
+                Button {
+                    DiagnosticsWindowPresenter.shared.show(controller: controller)
+                } label: {
+                    Label("Diagnostics", systemImage: "waveform.path.ecg")
+                }
+                Toggle("5/3 Matrix Mode", isOn: $controller.isFiveThirdMode)
+                    .disabled(!controller.outputDestination.usesESP32)
+                Divider()
                 Button {
                     CustomColorPanelPresenter.shared.show(controller: controller)
                 } label: {
@@ -70,12 +83,6 @@ struct StatusHeader: View {
         }
     }
 
-    private var deviceDescription: String {
-        if controller.connected {
-            return controller.deviceName ?? "Connected"
-        }
-        return "Device disconnected"
-    }
 }
 
 struct PresenceOverrideSection: View {
@@ -205,28 +212,6 @@ struct BrightnessSection: View {
     }
 }
 
-struct QuickActionsSection: View {
-    @ObservedObject var controller: AppController
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Button {
-                controller.test()
-            } label: {
-                Label("Test LEDs", systemImage: "lightbulb")
-                    .frame(maxWidth: .infinity)
-            }
-            Button {
-                DiagnosticsWindowPresenter.shared.show(controller: controller)
-            } label: {
-                Label("Diagnostics", systemImage: "waveform.path.ecg")
-                    .frame(maxWidth: .infinity)
-            }
-        }
-        .buttonStyle(.bordered)
-    }
-}
-
 @MainActor
 final class DiagnosticsWindowPresenter {
     static let shared = DiagnosticsWindowPresenter()
@@ -261,12 +246,23 @@ final class AppController: ObservableObject {
     @Published var signals: [PresenceSignal] = []
     @Published var connected = false
     @Published var deviceName: String?
+    @Published var busylightDeviceName: String?
+    @Published var outputDestination: OutputDestination = .both { didSet { tick() } }
+    // Level 1 is the lowest visible ESP32 matrix brightness (level 0 turns it off).
+    private static let lowestVisibleBrightnessPercent = 100.0 / 15.0
+    @Published var isFiveThirdMode = false {
+        didSet {
+            if isFiveThirdMode { brightnessPercent = Self.lowestVisibleBrightnessPercent }
+            tick()
+        }
+    }
     @Published var brightnessPercent = 100.0
     @Published var override: PresenceState?
     @Published var customColor = Color.purple
     @Published var isCustomColorOverride = false
     @Published var startAtLogin = false { didSet { setLoginItem() } }
     private let transport = USBSerialTransport()
+    private let busylight = KuandoBusylightTransport()
     private let sampler = LocalPresenceSampler(); private let resolver = PresenceResolver()
     private var timer: Timer?
     init() {
@@ -281,8 +277,28 @@ final class AppController: ObservableObject {
     }
     func tick() {
         signals = sampler.sample(); let next = override ?? resolver.resolve(signals)
-        let command = isCustomColorOverride ? customColorCommand.wireValue : USBCommand.presence(next).wireValue
-        Task { if !transport.isConnected { await transport.reconnect() }; if transport.isConnected { await transport.send(command) }; connected = transport.isConnected; deviceName = transport.deviceName }
+        let command = isFiveThirdMode ? USBCommand.fiveThree.wireValue : (isCustomColorOverride ? customColorCommand.wireValue : USBCommand.presence(next).wireValue)
+        let destination = outputDestination
+        Task {
+            if destination.usesESP32 && !transport.isConnected { await transport.reconnect() }
+            if destination.usesBusylight && !busylight.isConnected { await busylight.reconnect() }
+            if destination.usesESP32 && transport.isConnected {
+                // Ensure the special mark is rendered at its lowest visible brightness.
+                if isFiveThirdMode { await transport.send(USBCommand.brightness(1).wireValue) }
+                await transport.send(command)
+            }
+            if destination.usesBusylight && busylight.isConnected {
+                if isCustomColorOverride {
+                    let color = customColorComponents
+                    await busylight.send(red: color.red, green: color.green, blue: color.blue, brightnessPercent: brightnessPercent)
+                } else {
+                    await busylight.send(next, brightnessPercent: brightnessPercent)
+                }
+            }
+            connected = (destination.usesESP32 && transport.isConnected) || (destination.usesBusylight && busylight.isConnected)
+            deviceName = transport.deviceName
+            busylightDeviceName = busylight.deviceName
+        }
         if next != state { Logger(subsystem: "com.example.TeamsLight", category: "presence").info("Presence changed \(self.state.rawValue) -> \(next.rawValue)"); state = next }
     }
     func setPresenceOverride(_ state: PresenceState?) {
@@ -297,17 +313,39 @@ final class AppController: ObservableObject {
     func setCustomColor(_ color: Color) {
         customColor = color
         isCustomColorOverride = true
-        Task { await transport.send(customColorCommand.wireValue) }
+        let components = customColorComponents
+        Task {
+            if outputDestination.usesESP32 { await transport.send(customColorCommand.wireValue) }
+            if outputDestination.usesBusylight { await busylight.send(red: components.red, green: components.green, blue: components.blue, brightnessPercent: brightnessPercent) }
+        }
     }
     func setBrightness() {
         let deviceLevel = Int((brightnessPercent * 15 / 100).rounded())
-        Task { await transport.send(USBCommand.brightness(deviceLevel).wireValue) }
+        Task {
+            if outputDestination.usesESP32 { await transport.send(USBCommand.brightness(deviceLevel).wireValue) }
+            guard outputDestination.usesBusylight else { return }
+            if isCustomColorOverride {
+                let color = customColorComponents
+                await busylight.send(red: color.red, green: color.green, blue: color.blue, brightnessPercent: brightnessPercent)
+            } else {
+                await busylight.send(override ?? resolver.resolve(signals), brightnessPercent: brightnessPercent)
+            }
+        }
     }
     func adjustBrightness(by amount: Double) {
         brightnessPercent = min(100, max(0, brightnessPercent + amount))
         setBrightness()
     }
-    func test() { Task { await transport.send(USBCommand.test.wireValue) } }
+    func test() { Task {
+        if outputDestination.usesESP32 { await transport.send(USBCommand.test.wireValue) }
+        if outputDestination.usesBusylight {
+            for color in [(UInt8(255), UInt8(0), UInt8(0)), (0, 255, 0), (0, 0, 255)] {
+                await busylight.send(red: color.0, green: color.1, blue: color.2, brightnessPercent: brightnessPercent)
+                try? await Task.sleep(for: .milliseconds(350))
+            }
+            tick()
+        }
+    } }
     private func setLoginItem() { do { if startAtLogin { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() } } catch { Logger(subsystem: "com.example.TeamsLight", category: "app").error("Login item update failed") } }
 
     var displayTitle: String { isCustomColorOverride ? "Custom Color" : state.title }
@@ -315,10 +353,15 @@ final class AppController: ObservableObject {
     var menuBarSystemImage: String { isCustomColorOverride ? "paintpalette.fill" : state.menuBarSystemImage }
 
     private var customColorCommand: USBCommand {
+        let color = customColorComponents
+        return .color(color.red, color.green, color.blue)
+    }
+
+    private var customColorComponents: (red: UInt8, green: UInt8, blue: UInt8) {
         guard let color = NSColor(customColor).usingColorSpace(.deviceRGB) else {
-            return .color(128, 0, 128)
+            return (128, 0, 128)
         }
-        return .color(
+        return (
             UInt8((color.redComponent * 255).rounded()),
             UInt8((color.greenComponent * 255).rounded()),
             UInt8((color.blueComponent * 255).rounded())
@@ -326,9 +369,26 @@ final class AppController: ObservableObject {
     }
 }
 
+enum OutputDestination: String, CaseIterable, Identifiable {
+    case esp32
+    case busylight
+    case both
+
+    var id: Self { self }
+    var title: String {
+        switch self {
+        case .esp32: "ESP32"
+        case .busylight: "Busylight"
+        case .both: "Both"
+        }
+    }
+    var usesESP32: Bool { self != .busylight }
+    var usesBusylight: Bool { self != .esp32 }
+}
+
 struct DiagnosticsView: View {
     @ObservedObject var controller: AppController
-    var body: some View { Form { LabeledContent("Resolved status", value: controller.state.title); LabeledContent("USB device", value: controller.deviceName ?? "not connected"); LabeledContent("Serial response", value: controller.transportLastResponse); Section("Raw provider states") { ForEach(controller.signals, id: \.provider) { signal in LabeledContent(signal.provider, value: "\(signal.state.title): \(signal.detail)") } } }.padding().frame(minWidth: 500) }
+    var body: some View { Form { LabeledContent("Resolved status", value: controller.state.title); LabeledContent("ESP32 USB", value: controller.deviceName ?? "not connected"); LabeledContent("Kuando Busylight", value: controller.busylightDeviceName ?? "not connected"); LabeledContent("Serial response", value: controller.transportLastResponse); Section("Raw provider states") { ForEach(controller.signals, id: \.provider) { signal in LabeledContent(signal.provider, value: "\(signal.state.title): \(signal.detail)") } } }.padding().frame(minWidth: 500) }
 }
 
 private extension AppController { var transportLastResponse: String { transport.lastResponse } }
@@ -340,8 +400,10 @@ private extension PresenceState {
             return .green
         case .away:
             return .yellow
-        case .busy, .dnd, .inCall, .presenting:
+        case .busy, .inCall:
             return .red
+        case .dnd, .presenting:
+            return .purple
         case .inMeeting:
             return .orange
         case .offline, .unknown:
