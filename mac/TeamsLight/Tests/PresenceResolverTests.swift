@@ -23,11 +23,48 @@ final class PresenceResolverTests: XCTestCase {
         XCTAssertEqual(USBCommand.brightness(-1).wireValue, "BRIGHTNESS 0")
         XCTAssertEqual(USBCommand.brightness(12).wireValue, "BRIGHTNESS 12")
         XCTAssertEqual(USBCommand.color(1, 2, 3).wireValue, "COLOR 1 2 3")
+        XCTAssertEqual(
+            USBCommand.pixel(
+                MatrixCoordinate(row: 2, column: 5),
+                LEDColor(red: 1, green: 2, blue: 3)
+            ).wireValue,
+            "PIXEL 2 5 1 2 3"
+        )
         XCTAssertEqual(USBCommand.ping.wireValue, "PING")
         XCTAssertEqual(USBCommand.status.wireValue, "STATUS")
         XCTAssertEqual(USBCommand.test.wireValue, "TEST")
         XCTAssertEqual(USBCommand.fiveThree.wireValue, "FIVE_THREE")
         XCTAssertEqual(USBCommand.off.wireValue, "OFF")
+    }
+    func testLEDMatrixUsesLogicalRowMajorRGBPayload() {
+        var matrix = LEDMatrix()
+        matrix[MatrixCoordinate(row: 0, column: 0)] = LEDColor(red: 255, green: 0, blue: 128)
+        matrix[MatrixCoordinate(row: 7, column: 7)] = LEDColor(red: 1, green: 2, blue: 3)
+
+        XCTAssertEqual(matrix.pixels.count, 64)
+        XCTAssertEqual(matrix.hexPayload.count, 384)
+        XCTAssertTrue(matrix.hexPayload.hasPrefix("FF0080"))
+        XCTAssertTrue(matrix.hexPayload.hasSuffix("010203"))
+        XCTAssertEqual(USBCommand.matrix(matrix).wireValue.count, 391)
+
+        matrix.fill(with: .black)
+        XCTAssertEqual(Set(matrix.pixels), [.black])
+    }
+    func testLEDMatrixRectangularSelectionUpdatesEverySelectedPixel() {
+        let start = MatrixCoordinate(row: 1, column: 2)
+        let end = MatrixCoordinate(row: 3, column: 4)
+        let selection = MatrixCoordinate.rectangle(from: start, to: end)
+        let color = LEDColor(red: 10, green: 20, blue: 30)
+        var matrix = LEDMatrix()
+
+        matrix.setColor(color, at: selection)
+
+        XCTAssertEqual(selection.count, 9)
+        XCTAssertTrue(selection.contains(start))
+        XCTAssertTrue(selection.contains(end))
+        XCTAssertEqual(matrix[MatrixCoordinate(row: 2, column: 3)], color)
+        XCTAssertEqual(matrix[MatrixCoordinate(row: 0, column: 0)], .black)
+        XCTAssertEqual(LEDMatrix.coordinates.count, LEDMatrix.count)
     }
     func testPresencePresentationAndSignalEquality() {
         XCTAssertEqual(PresenceState.inMeeting.title, "In Meeting")

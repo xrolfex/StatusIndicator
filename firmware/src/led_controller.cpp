@@ -33,9 +33,36 @@ uint16_t LedController::pixelIndex(uint8_t row, uint8_t column) const {
 #endif
   return physicalRow * MATRIX_WIDTH + physicalColumn;
 }
-void LedController::setState(PresenceState state) { state_ = state; diagnostic_ = false; }
-void LedController::setBrightness(uint8_t percent) { brightnessPercent_ = std::min(percent, kMaxBrightness); }
-void LedController::setDiagnosticColor(uint8_t r, uint8_t g, uint8_t b) { diagnostic_ = true; render(r, g, b); }
+void LedController::setState(PresenceState state) {
+  state_ = state;
+  diagnostic_ = false;
+  matrixMode_ = false;
+}
+void LedController::setBrightness(uint8_t percent) {
+  brightnessPercent_ = std::min(percent, kMaxBrightness);
+  if (matrixMode_) renderMatrix();
+}
+void LedController::setDiagnosticColor(uint8_t r, uint8_t g, uint8_t b) {
+  diagnostic_ = true;
+  matrixMode_ = false;
+  render(r, g, b);
+}
+void LedController::setMatrix(const uint8_t* rgbValues) {
+  std::copy(rgbValues, rgbValues + sizeof(matrixColors_), matrixColors_);
+  diagnostic_ = true;
+  matrixMode_ = true;
+  renderMatrix();
+}
+void LedController::setMatrixPixel(uint8_t row, uint8_t column, uint8_t r, uint8_t g, uint8_t b) {
+  if (!matrixMode_) std::fill(matrixColors_, matrixColors_ + sizeof(matrixColors_), 0);
+  const uint16_t offset = (row * MATRIX_WIDTH + column) * 3;
+  matrixColors_[offset] = r;
+  matrixColors_[offset + 1] = g;
+  matrixColors_[offset + 2] = b;
+  diagnostic_ = true;
+  matrixMode_ = true;
+  renderMatrix();
+}
 void LedController::showFiveThird() {
   // Compact 5/3 mark: white numerals and a green slash; all other LEDs stay off.
   static constexpr uint8_t kFive[] = {0b111, 0b100, 0b111, 0b001, 0b111};
@@ -56,16 +83,43 @@ void LedController::showFiveThird() {
   setPixel(4, 3, pixels_.Color(0, brightnessPercent_ * 17, 0));
   setPixel(5, 3, pixels_.Color(0, brightnessPercent_ * 17, 0));
   diagnostic_ = true;
+  matrixMode_ = false;
   pixels_.show();
 }
-void LedController::off() { state_ = PresenceState::OFFLINE; diagnostic_ = false; render(0, 0, 0); }
-void LedController::test() { diagnostic_ = true; render(255, 255, 255, 80); }
+void LedController::off() {
+  state_ = PresenceState::OFFLINE;
+  diagnostic_ = false;
+  matrixMode_ = false;
+  render(0, 0, 0);
+}
+void LedController::test() {
+  diagnostic_ = true;
+  matrixMode_ = false;
+  render(255, 255, 255, 80);
+}
 
 void LedController::render(uint8_t r, uint8_t g, uint8_t b, uint8_t scale) {
   const uint16_t factor = uint16_t(brightnessPercent_) * scale / 100;
   for (uint8_t row = 0; row < MATRIX_HEIGHT; ++row)
     for (uint8_t col = 0; col < MATRIX_WIDTH; ++col)
       pixels_.setPixelColor(pixelIndex(row, col), pixels_.Color(uint16_t(r) * factor / 255, uint16_t(g) * factor / 255, uint16_t(b) * factor / 255));
+  pixels_.show();
+}
+
+void LedController::renderMatrix() {
+  for (uint8_t row = 0; row < MATRIX_HEIGHT; ++row) {
+    for (uint8_t col = 0; col < MATRIX_WIDTH; ++col) {
+      const uint16_t offset = (row * MATRIX_WIDTH + col) * 3;
+      pixels_.setPixelColor(
+        pixelIndex(row, col),
+        pixels_.Color(
+          uint16_t(matrixColors_[offset]) * brightnessPercent_ / 100,
+          uint16_t(matrixColors_[offset + 1]) * brightnessPercent_ / 100,
+          uint16_t(matrixColors_[offset + 2]) * brightnessPercent_ / 100
+        )
+      );
+    }
+  }
   pixels_.show();
 }
 

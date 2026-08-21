@@ -8,4 +8,6 @@ The app uses `SMAppService.mainApp` for the optional Start at Login switch. It e
 
 The app drives a connected ESP32-S3 Matrix over its verified native USB serial port and compatible Kuando/Plenom Busylights over IOKit HID. Both may be connected simultaneously. Kuando support uses the standard HID output report for recognized legacy `04D8` devices and Plenom `27BB:3BCA` through `27BB:3BCF` models; it requires no vendor SDK or driver.
 
+The settings menu's **LED Matrix Editor** displays the ESP32's logical 8×8 layout. Click selects one pixel, Command-click toggles additional pixels, Shift-click selects a rectangular range, and **Select All** selects the complete matrix. Changing the color updates every selected NeoPixel; reopening the editor restores the complete in-memory frame. Presence selection exits custom matrix mode.
+
 Local microphone detection is CoreAudio “input device running” state and camera detection is CoreMediaIO “device running” state. Camera access may be denied by TCC/MDM. Teams-specific state is limited to whether the app is running; the app does not access Teams files, databases, tokens, or UI internals.

@@ -61,7 +61,19 @@ struct StatusHeader: View {
                 } label: {
                     Label("Diagnostics", systemImage: "waveform.path.ecg")
                 }
-                Toggle("5/3 Matrix Mode", isOn: $controller.isFiveThirdMode)
+                Button {
+                    LEDMatrixWindowPresenter.shared.show(controller: controller)
+                } label: {
+                    Label("LED Matrix Editor…", systemImage: "square.grid.3x3.fill")
+                }
+                .disabled(!controller.outputDestination.usesESP32)
+                Toggle(
+                    "5/3 Matrix Mode",
+                    isOn: Binding(
+                        get: { controller.isFiveThirdMode },
+                        set: { controller.setFiveThirdMode($0) }
+                    )
+                )
                     .disabled(!controller.outputDestination.usesESP32)
                 Divider()
                 Button {
@@ -118,7 +130,12 @@ struct PresenceChoiceButton: View {
         Button(choice.title) {
             controller.setPresenceOverride(choice.state)
         }
-        .buttonStyle(PresenceChipButtonStyle(isSelected: !controller.isCustomColorOverride && controller.override == choice.state))
+        .buttonStyle(PresenceChipButtonStyle(
+            isSelected: !controller.isCustomColorOverride
+                && !controller.isMatrixOverride
+                && !controller.isFiveThirdMode
+                && controller.override == choice.state
+        ))
     }
 }
 
@@ -250,16 +267,13 @@ final class AppController: ObservableObject {
     @Published var outputDestination: OutputDestination = .both { didSet { tick() } }
     // Level 1 is the lowest visible ESP32 matrix brightness (level 0 turns it off).
     private static let lowestVisibleBrightnessPercent = 100.0 / 15.0
-    @Published var isFiveThirdMode = false {
-        didSet {
-            if isFiveThirdMode { brightnessPercent = Self.lowestVisibleBrightnessPercent }
-            tick()
-        }
-    }
+    @Published private(set) var isFiveThirdMode = false
     @Published var brightnessPercent = 100.0
     @Published var override: PresenceState?
     @Published var customColor = Color.purple
     @Published var isCustomColorOverride = false
+    @Published private(set) var matrix = LEDMatrix()
+    @Published private(set) var isMatrixOverride = false
     @Published var startAtLogin = false { didSet { setLoginItem() } }
     private let transport = USBSerialTransport()
     private let busylight = KuandoBusylightTransport()
@@ -277,7 +291,16 @@ final class AppController: ObservableObject {
     }
     func tick() {
         signals = sampler.sample(); let next = override ?? resolver.resolve(signals)
-        let command = isFiveThirdMode ? USBCommand.fiveThree.wireValue : (isCustomColorOverride ? customColorCommand.wireValue : USBCommand.presence(next).wireValue)
+        let command: USBCommand
+        if isMatrixOverride {
+            command = .matrix(matrix)
+        } else if isFiveThirdMode {
+            command = .fiveThree
+        } else if isCustomColorOverride {
+            command = customColorCommand
+        } else {
+            command = .presence(next)
+        }
         let destination = outputDestination
         Task {
             if destination.usesESP32 && !transport.isConnected { await transport.reconnect() }
@@ -285,7 +308,7 @@ final class AppController: ObservableObject {
             if destination.usesESP32 && transport.isConnected {
                 // Ensure the special mark is rendered at its lowest visible brightness.
                 if isFiveThirdMode { await transport.send(USBCommand.brightness(1).wireValue) }
-                await transport.send(command)
+                await transport.send(command.wireValue)
             }
             if destination.usesBusylight && busylight.isConnected {
                 if isCustomColorOverride {
@@ -302,22 +325,86 @@ final class AppController: ObservableObject {
         if next != state { Logger(subsystem: "com.example.TeamsLight", category: "presence").info("Presence changed \(self.state.rawValue) -> \(next.rawValue)"); state = next }
     }
     func setPresenceOverride(_ state: PresenceState?) {
+        isFiveThirdMode = false
+        isMatrixOverride = false
         isCustomColorOverride = false
         override = state
         tick()
     }
+    func setFiveThirdMode(_ enabled: Bool) {
+        isFiveThirdMode = enabled
+        if enabled {
+            isMatrixOverride = false
+            isCustomColorOverride = false
+            brightnessPercent = Self.lowestVisibleBrightnessPercent
+        }
+        tick()
+    }
     func activateCustomColor() {
+        isFiveThirdMode = false
+        isMatrixOverride = false
         isCustomColorOverride = true
         tick()
     }
     func setCustomColor(_ color: Color) {
         customColor = color
+        isFiveThirdMode = false
+        isMatrixOverride = false
         isCustomColorOverride = true
         let components = customColorComponents
         Task {
             if outputDestination.usesESP32 { await transport.send(customColorCommand.wireValue) }
             if outputDestination.usesBusylight { await busylight.send(red: components.red, green: components.green, blue: components.blue, brightnessPercent: brightnessPercent) }
         }
+    }
+    func activateMatrixEditor() {
+        isFiveThirdMode = false
+        isCustomColorOverride = false
+        isMatrixOverride = true
+        tick()
+    }
+    func matrixColor(at coordinate: MatrixCoordinate) -> LEDColor {
+        matrix[coordinate]
+    }
+    func setMatrixColor(_ color: Color, at coordinates: Set<MatrixCoordinate>) {
+        guard !coordinates.isEmpty else {
+            Logger(subsystem: "com.example.TeamsLight", category: "matrix").error("Cannot set a matrix color without selected pixels")
+            return
+        }
+        guard let converted = NSColor(color).usingColorSpace(.deviceRGB) else {
+            Logger(subsystem: "com.example.TeamsLight", category: "matrix").error("Could not convert the selected matrix color to RGB")
+            return
+        }
+        func byte(_ component: CGFloat) -> UInt8 {
+            UInt8((min(1, max(0, component)) * 255).rounded())
+        }
+        let ledColor = LEDColor(
+            red: byte(converted.redComponent),
+            green: byte(converted.greenComponent),
+            blue: byte(converted.blueComponent)
+        )
+        var updatedMatrix = matrix
+        updatedMatrix.setColor(ledColor, at: coordinates)
+        let wasMatrixOverride = isMatrixOverride
+        matrix = updatedMatrix
+        isFiveThirdMode = false
+        isCustomColorOverride = false
+        isMatrixOverride = true
+        let command: USBCommand
+        if wasMatrixOverride, coordinates.count == 1, let coordinate = coordinates.first {
+            command = .pixel(coordinate, ledColor)
+        } else {
+            command = .matrix(updatedMatrix)
+        }
+        Task {
+            if outputDestination.usesESP32 {
+                await transport.send(command.wireValue)
+            }
+        }
+    }
+    func clearMatrix() {
+        matrix = LEDMatrix()
+        activateMatrixEditor()
     }
     func setBrightness() {
         let deviceLevel = Int((brightnessPercent * 15 / 100).rounded())
@@ -348,9 +435,20 @@ final class AppController: ObservableObject {
     } }
     private func setLoginItem() { do { if startAtLogin { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() } } catch { Logger(subsystem: "com.example.TeamsLight", category: "app").error("Login item update failed") } }
 
-    var displayTitle: String { isCustomColorOverride ? "Custom Color" : state.title }
-    var displayAccentColor: Color { isCustomColorOverride ? customColor : state.accentColor }
-    var menuBarSystemImage: String { isCustomColorOverride ? "paintpalette.fill" : state.menuBarSystemImage }
+    var displayTitle: String {
+        if isMatrixOverride { return "Custom Matrix" }
+        if isFiveThirdMode { return "5/3 Matrix" }
+        return isCustomColorOverride ? "Custom Color" : state.title
+    }
+    var displayAccentColor: Color {
+        if isMatrixOverride { return .cyan }
+        if isFiveThirdMode { return .green }
+        return isCustomColorOverride ? customColor : state.accentColor
+    }
+    var menuBarSystemImage: String {
+        if isMatrixOverride || isFiveThirdMode { return "square.grid.3x3.fill" }
+        return isCustomColorOverride ? "paintpalette.fill" : state.menuBarSystemImage
+    }
 
     private var customColorCommand: USBCommand {
         let color = customColorComponents

@@ -3,6 +3,26 @@
 #include <cstdio>
 #include <cstring>
 
+namespace {
+int hexNibble(char value) {
+  if (value >= '0' && value <= '9') return value - '0';
+  if (value >= 'A' && value <= 'F') return value - 'A' + 10;
+  if (value >= 'a' && value <= 'f') return value - 'a' + 10;
+  return -1;
+}
+}
+
+bool parseMatrixPayload(const char* payload, uint8_t* rgbValues, size_t pixelCount) {
+  if (!payload || !rgbValues || strlen(payload) != pixelCount * 6) return false;
+  for (size_t component = 0; component < pixelCount * 3; ++component) {
+    const int high = hexNibble(payload[component * 2]);
+    const int low = hexNibble(payload[component * 2 + 1]);
+    if (high < 0 || low < 0) return false;
+    rgbValues[component] = static_cast<uint8_t>((high << 4) | low);
+  }
+  return true;
+}
+
 void SerialProtocol::reply(Stream& serial, const char* text) { serial.print(text); serial.print('\n'); }
 void SerialProtocol::poll(Stream& serial) {
   while (serial.available()) {
@@ -37,7 +57,34 @@ void SerialProtocol::handle(Stream& serial, char* line) {
   if (!strcmp(line, "OFF")) { leds_.off(); reply(serial, "OK OFF"); return; }
   if (!strcmp(line, "TEST")) { leds_.test(); reply(serial, "OK TEST"); return; }
   if (!strcmp(line, "FIVE_THREE")) { leds_.showFiveThird(); reply(serial, "OK FIVE_THREE"); return; }
-  int value, r, g, b; char extra;
+  if (!strncmp(line, "MATRIX", 6)) {
+    uint8_t rgbValues[LED_COUNT * 3];
+    if (line[6] != ' ' || !parseMatrixPayload(line + 7, rgbValues, LED_COUNT)) {
+      reply(serial, "ERR MALFORMED_COMMAND");
+      return;
+    }
+    leds_.setMatrix(rgbValues);
+    reply(serial, "OK MATRIX");
+    return;
+  }
+  int value, row, column, r, g, b; char extra;
+  if (!strncmp(line, "PIXEL", 5)) {
+    if (sscanf(line, "PIXEL %d %d %d %d %d %c", &row, &column, &r, &g, &b, &extra) != 5) {
+      reply(serial, "ERR MALFORMED_COMMAND");
+      return;
+    }
+    if (row < 0 || row >= MATRIX_HEIGHT || column < 0 || column >= MATRIX_WIDTH) {
+      reply(serial, "ERR PIXEL_RANGE");
+      return;
+    }
+    if (r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255) {
+      reply(serial, "ERR COLOR_RANGE");
+      return;
+    }
+    leds_.setMatrixPixel(row, column, r, g, b);
+    serial.printf("OK PIXEL %d %d\n", row, column);
+    return;
+  }
   if (sscanf(line, "BRIGHTNESS %d %c", &value, &extra) >= 1) {
     if (sscanf(line, "BRIGHTNESS %d %c", &value, &extra) != 1) { reply(serial, "ERR MALFORMED_COMMAND"); return; }
     if (value < 0 || value > 15) { reply(serial, "ERR BRIGHTNESS_RANGE"); return; }

@@ -84,6 +84,7 @@ The menu-bar popover includes:
 - A settings menu for choosing **ESP32**, **Busylight**, or **Both**.
 - Diagnostics and a Test Lights sequence (tests every selected output).
 - Optional Start at Login.
+- An **LED Matrix Editor** for selecting each ESP32 NeoPixel and assigning its RGB color.
 - A hidden-style **5/3 Matrix Mode**, available when ESP32 output is selected. It displays a low-brightness, 180°-oriented 5/3 mark on the matrix while all other LEDs remain off. Turning it off restores ordinary presence indication.
 
 The app reconnects USB devices after sleep/wake and transient disconnects. Camera access may require macOS permission and can be restricted by MDM.
@@ -95,9 +96,13 @@ The ESP32 accepts newline-delimited UTF-8 serial commands:
 ```text
 AVAILABLE  BUSY  IN_CALL  IN_MEETING  DND  PRESENTING  AWAY  OFFLINE  UNKNOWN
 PING  STATUS  BRIGHTNESS 0..15  COLOR R G B  TEST  FIVE_THREE  OFF
+PIXEL ROW COLUMN R G B
+MATRIX <64 contiguous RRGGBB values>
 ```
 
-It responds with `PONG`, `OK …`, or `ERR …`. `COLOR` and `TEST` are temporary diagnostic modes; a normal state command restores presence rendering. `FIVE_THREE` displays the special matrix mark.
+`ROW` and `COLUMN` are zero-based logical coordinates from `0` through `7`. A `MATRIX` payload is exactly 384 hexadecimal characters in logical row-major order; the firmware applies the configured rotation and serpentine wiring. `PIXEL` and `MATRIX` enter custom matrix mode, and a normal state command restores presence rendering.
+
+The firmware responds with `PONG`, `OK …`, or `ERR …`. `COLOR` and `TEST` are temporary diagnostic modes. `FIVE_THREE` displays the special matrix mark.
 
 ## Development and verification
 

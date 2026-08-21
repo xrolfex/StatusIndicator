@@ -16,6 +16,8 @@
 		100000000000000000000008 /* Sources/Serial/KuandoBusylightTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000000B /* Sources/Serial/KuandoBusylightTransport.swift */; };
 		100000000000000000000007 /* Tests/PresenceResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000007 /* Tests/PresenceResolverTests.swift */; };
 		100000000000000000000009 /* Resources/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000000C /* Resources/Assets.xcassets */; };
+		100000000000000000000010 /* Sources/Models/LEDMatrix.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000010 /* Sources/Models/LEDMatrix.swift */; };
+		100000000000000000000011 /* Sources/App/LEDMatrixEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000011 /* Sources/App/LEDMatrixEditor.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -39,6 +41,8 @@
 		200000000000000000000008 /* Resources/Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Resources/Info.plist; sourceTree = SOURCE_ROOT; };
 		20000000000000000000000B /* Sources/Serial/KuandoBusylightTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Serial/KuandoBusylightTransport.swift; sourceTree = SOURCE_ROOT; };
 		20000000000000000000000C /* Resources/Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Resources/Assets.xcassets; sourceTree = SOURCE_ROOT; };
+		200000000000000000000010 /* Sources/Models/LEDMatrix.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Models/LEDMatrix.swift; sourceTree = SOURCE_ROOT; };
+		200000000000000000000011 /* Sources/App/LEDMatrixEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/App/LEDMatrixEditor.swift; sourceTree = SOURCE_ROOT; };
 		200000000000000000000009 /* TeamsLight.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TeamsLight.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		20000000000000000000000A /* TeamsLightTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TeamsLightTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -75,7 +79,9 @@
 			isa = PBXGroup;
 			children = (
 				200000000000000000000001 /* Sources/App/TeamsLightApp.swift */,
+				200000000000000000000011 /* Sources/App/LEDMatrixEditor.swift */,
 				200000000000000000000002 /* Sources/Models/PresenceState.swift */,
+				200000000000000000000010 /* Sources/Models/LEDMatrix.swift */,
 				200000000000000000000003 /* Sources/Presence/LocalPresenceProviders.swift */,
 				200000000000000000000004 /* Sources/Presence/PresenceResolver.swift */,
 				200000000000000000000005 /* Sources/Serial/SerialTransport.swift */,
@@ -201,7 +207,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				100000000000000000000001 /* Sources/App/TeamsLightApp.swift in Sources */,
+				100000000000000000000011 /* Sources/App/LEDMatrixEditor.swift in Sources */,
 				100000000000000000000002 /* Sources/Models/PresenceState.swift in Sources */,
+				100000000000000000000010 /* Sources/Models/LEDMatrix.swift in Sources */,
 				100000000000000000000003 /* Sources/Presence/LocalPresenceProviders.swift in Sources */,
 				100000000000000000000004 /* Sources/Presence/PresenceResolver.swift in Sources */,
 				100000000000000000000005 /* Sources/Serial/SerialTransport.swift in Sources */,

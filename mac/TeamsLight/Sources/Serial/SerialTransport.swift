@@ -76,7 +76,24 @@ final class USBSerialTransport: SerialTransport, @unchecked Sendable {
         if fd < 0 { connectLocked() }
         guard fd >= 0 else { return }
         let data = Array(text.utf8)
-        if Darwin.write(fd, data, data.count) < 0 { logger.error("Serial write failed"); closeLocked() }
+        let deadline = Date().addingTimeInterval(1)
+        var offset = 0
+        while offset < data.count {
+            let written = data.withUnsafeBufferPointer { buffer in
+                Darwin.write(fd, buffer.baseAddress?.advanced(by: offset), buffer.count - offset)
+            }
+            if written > 0 {
+                offset += written
+            } else if written < 0 && errno == EINTR {
+                continue
+            } else if written < 0 && (errno == EAGAIN || errno == EWOULDBLOCK) && Date() < deadline {
+                usleep(10_000)
+            } else {
+                logger.error("Serial write failed")
+                closeLocked()
+                return
+            }
+        }
     }
     private func closeLocked() { if fd >= 0 { Darwin.close(fd); fd = -1 }; deviceName = nil }
 }
