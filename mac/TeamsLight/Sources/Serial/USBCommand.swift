@@ -7,7 +7,7 @@ enum USBCommand: Equatable, Sendable {
     case matrix(LEDMatrix)
     case pixel(MatrixCoordinate, LEDColor)
     case ping, status, test, fiveThree, off
-
+    
     var wireValue: String {
         switch self {
         case .presence(let state): return state.rawValue

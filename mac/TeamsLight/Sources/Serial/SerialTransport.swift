@@ -25,7 +25,7 @@ final class USBSerialTransport: SerialTransport, @unchecked Sendable {
     private(set) var lastResponse = "—"
     var isConnected: Bool { fd >= 0 }
     private let queue = DispatchQueue(label: "com.example.TeamsLight.serial")
-
+    
     func reconnect() async { await withCheckedContinuation { continuation in queue.async { self.closeLocked(); self.connectLocked(); continuation.resume() } } }
     func send(_ command: String) async { await withCheckedContinuation { continuation in queue.async { self.writeLocked(command + "\n"); continuation.resume() } } }
     func close() { queue.sync { closeLocked() } }

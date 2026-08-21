@@ -3,14 +3,14 @@ import SwiftUI
 @MainActor
 final class LEDMatrixWindowPresenter {
     static let shared = LEDMatrixWindowPresenter()
-
+    
     private var window: NSWindow?
-
+    
     private init() {}
-
+    
     func show(controller: AppController) {
         controller.activateMatrixEditor()
-
+        
         if window == nil {
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 480, height: 640),
@@ -24,7 +24,7 @@ final class LEDMatrixWindowPresenter {
             window.center()
             self.window = window
         }
-
+        
         NSApplication.shared.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
     }
@@ -34,7 +34,7 @@ struct LEDMatrixEditorView: View {
     @ObservedObject var controller: AppController
     @State private var selectedPixels: Set<MatrixCoordinate> = [MatrixCoordinate(row: 0, column: 0)]
     @State private var selectionAnchor = MatrixCoordinate(row: 0, column: 0)
-
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 4) {
@@ -44,7 +44,7 @@ struct LEDMatrixEditorView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
-
+            
             Grid(horizontalSpacing: 7, verticalSpacing: 7) {
                 GridRow {
                     Color.clear.frame(width: 20, height: 16)
@@ -75,9 +75,9 @@ struct LEDMatrixEditorView: View {
                 }
             }
             .frame(maxWidth: .infinity)
-
+            
             Divider()
-
+            
             HStack {
                 ColorPicker(
                     selectionTitle,
@@ -89,7 +89,7 @@ struct LEDMatrixEditorView: View {
                     .font(.body.monospaced())
                     .foregroundStyle(.secondary)
             }
-
+            
             HStack {
                 Button("Select All") {
                     selectedPixels = Set(LEDMatrix.coordinates)
@@ -112,31 +112,31 @@ struct LEDMatrixEditorView: View {
         .padding(24)
         .frame(width: 480, height: 640)
     }
-
+    
     private var selectedColor: Binding<Color> {
         Binding(
             get: { controller.matrixColor(at: referencePixel).displayColor },
             set: { controller.setMatrixColor($0, at: selectedPixels) }
         )
     }
-
+    
     private var referencePixel: MatrixCoordinate {
         selectedPixels.contains(selectionAnchor) ? selectionAnchor : selectedPixels.first!
     }
-
+    
     private var selectionTitle: String {
         if selectedPixels.count == 1 {
             return "Row \(referencePixel.row + 1), Column \(referencePixel.column + 1)"
         }
         return "\(selectedPixels.count) Pixels Selected"
     }
-
+    
     private var selectionColorDescription: String {
         let colors = Set(selectedPixels.map { controller.matrixColor(at: $0) })
         guard colors.count == 1, let color = colors.first else { return "Mixed" }
         return "#\(color.hexValue)"
     }
-
+    
     private func select(_ coordinate: MatrixCoordinate) {
         let modifiers = NSEvent.modifierFlags
         if modifiers.contains(.shift) {
@@ -160,7 +160,7 @@ private struct MatrixPixelButton: View {
     let color: LEDColor
     let isSelected: Bool
     let action: () -> Void
-
+    
     var body: some View {
         Button(action: action) {
             RoundedRectangle(cornerRadius: 5)

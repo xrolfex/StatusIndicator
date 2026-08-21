@@ -3,7 +3,7 @@ import Foundation
 enum PresenceState: String, CaseIterable, Sendable {
     case available = "AVAILABLE", busy = "BUSY", inCall = "IN_CALL", inMeeting = "IN_MEETING"
     case dnd = "DND", presenting = "PRESENTING", away = "AWAY", offline = "OFFLINE", unknown = "UNKNOWN"
-
+    
     var title: String {
         switch self {
         case .dnd:
@@ -12,7 +12,7 @@ enum PresenceState: String, CaseIterable, Sendable {
             return rawValue.replacingOccurrences(of: "_", with: " ").capitalized
         }
     }
-
+    
     var menuBarSystemImage: String {
         switch self {
         case .available:

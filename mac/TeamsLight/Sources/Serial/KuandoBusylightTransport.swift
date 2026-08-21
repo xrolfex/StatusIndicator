@@ -7,12 +7,12 @@ enum KuandoBusylightCommand {
     static let legacyVendorID: UInt16 = 0x04D8
     static let plenomVendorID: UInt16 = 0x27BB
     static let plenomProductIDs: Set<UInt16> = [0x3BCA, 0x3BCB, 0x3BCC, 0x3BCD, 0x3BCE, 0x3BCF]
-
+    
     static func matches(vendorID: Int, productID: Int) -> Bool {
         guard let vendor = UInt16(exactly: vendorID), let product = UInt16(exactly: productID) else { return false }
         return vendor == legacyVendorID || (vendor == plenomVendorID && plenomProductIDs.contains(product))
     }
-
+    
     /// Complete HIDAPI-style report: report ID 0 followed by the 64-byte
     /// Busylight command frame used by Alpha, UC, and Omega devices.
     static func colorReport(for state: PresenceState) -> [UInt8] {
@@ -28,7 +28,7 @@ enum KuandoBusylightCommand {
         }
         return colorReport(red: color.0, green: color.1, blue: color.2)
     }
-
+    
     static func scaled(red: UInt8, green: UInt8, blue: UInt8, brightnessPercent: Double) -> (UInt8, UInt8, UInt8) {
         let multiplier = min(100, max(0, brightnessPercent)) / 100
         return (
@@ -37,10 +37,10 @@ enum KuandoBusylightCommand {
             UInt8((Double(blue) * multiplier).rounded())
         )
     }
-
+    
     static func colorReport(red: UInt8, green: UInt8, blue: UInt8) -> [UInt8] {
         var payload = Array(repeating: UInt8(0), count: outputReportLength)
-
+        
         // One 8-byte "single-step" command. The remaining six steps are empty.
         payload[0] = 0x10
         payload[2] = red
@@ -48,14 +48,14 @@ enum KuandoBusylightCommand {
         payload[4] = blue
         payload[5] = 1
         payload[7] = 128 // no ringtone
-
+        
         // Global defaults required by the SDK's ReportOut prefill.
         payload[57] = 0xFF
         payload[58] = 0xFF
         payload[59] = 0xFF
         payload[60] = 0xFF
         payload[61] = 0xFF
-
+        
         let checksum = payload.prefix(63).reduce(UInt16(0)) { $0 &+ UInt16($1) }
         payload[62] = UInt8(checksum >> 8)
         payload[63] = UInt8(truncatingIfNeeded: checksum)
@@ -70,7 +70,7 @@ final class KuandoBusylightTransport: @unchecked Sendable {
     private var devices: [IOHIDDevice] = []
     private(set) var deviceName: String?
     var isConnected: Bool { !devices.isEmpty }
-
+    
     func reconnect() async {
         await withCheckedContinuation { continuation in
             queue.async {
@@ -80,19 +80,19 @@ final class KuandoBusylightTransport: @unchecked Sendable {
             }
         }
     }
-
+    
     func send(_ state: PresenceState, brightnessPercent: Double = 100) async {
         let report = KuandoBusylightCommand.colorReport(for: state)
         let color = KuandoBusylightCommand.scaled(red: report[3], green: report[4], blue: report[5], brightnessPercent: brightnessPercent)
         let scaledReport = KuandoBusylightCommand.colorReport(red: color.0, green: color.1, blue: color.2)
         await send(scaledReport)
     }
-
+    
     func send(red: UInt8, green: UInt8, blue: UInt8, brightnessPercent: Double = 100) async {
         let color = KuandoBusylightCommand.scaled(red: red, green: green, blue: blue, brightnessPercent: brightnessPercent)
         await send(KuandoBusylightCommand.colorReport(red: color.0, green: color.1, blue: color.2))
     }
-
+    
     private func send(_ report: [UInt8]) async {
         await withCheckedContinuation { continuation in
             queue.async {
@@ -101,7 +101,7 @@ final class KuandoBusylightTransport: @unchecked Sendable {
             }
         }
     }
-
+    
     private func connectLocked() {
         let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
         let matchers: [[String: Int]] = [
@@ -119,7 +119,7 @@ final class KuandoBusylightTransport: @unchecked Sendable {
         self.manager = manager
         updateDeviceNameLocked()
     }
-
+    
     private func writeLocked(_ report: [UInt8]) {
         if devices.isEmpty { connectLocked() }
         guard !devices.isEmpty else { return }
@@ -133,14 +133,14 @@ final class KuandoBusylightTransport: @unchecked Sendable {
         }
         if devices.isEmpty { closeLocked() } else { updateDeviceNameLocked() }
     }
-
+    
     private func closeLocked() {
         if let manager { IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone)) }
         manager = nil
         devices = []
         deviceName = nil
     }
-
+    
     private func updateDeviceNameLocked() {
         if devices.count == 1, let device = devices.first {
             deviceName = IOHIDDeviceGetProperty(device, kIOHIDProductKey as CFString) as? String ?? "Kuando Busylight"

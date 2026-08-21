@@ -5,7 +5,7 @@ import os
 @main
 struct TeamsLightApp: App {
     @StateObject private var controller = AppController()
-
+    
     var body: some Scene {
         MenuBarExtra("Teams Light", systemImage: controller.menuBarSystemImage) {
             TeamsLightPopover(controller: controller)
@@ -16,7 +16,7 @@ struct TeamsLightApp: App {
 
 struct TeamsLightPopover: View {
     @ObservedObject var controller: AppController
-
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             StatusHeader(controller: controller)
@@ -31,7 +31,7 @@ struct TeamsLightPopover: View {
 
 struct StatusHeader: View {
     @ObservedObject var controller: AppController
-
+    
     var body: some View {
         HStack(spacing: 10) {
             Circle()
@@ -74,7 +74,7 @@ struct StatusHeader: View {
                         set: { controller.setFiveThirdMode($0) }
                     )
                 )
-                    .disabled(!controller.outputDestination.usesESP32)
+                .disabled(!controller.outputDestination.usesESP32)
                 Divider()
                 Button {
                     CustomColorPanelPresenter.shared.show(controller: controller)
@@ -94,12 +94,12 @@ struct StatusHeader: View {
             .help("Settings")
         }
     }
-
+    
 }
 
 struct PresenceOverrideSection: View {
     @ObservedObject var controller: AppController
-
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Presence")
@@ -125,16 +125,16 @@ struct PresenceOverrideSection: View {
 struct PresenceChoiceButton: View {
     let choice: PresenceChoice
     @ObservedObject var controller: AppController
-
+    
     var body: some View {
         Button(choice.title) {
             controller.setPresenceOverride(choice.state)
         }
         .buttonStyle(PresenceChipButtonStyle(
             isSelected: !controller.isCustomColorOverride
-                && !controller.isMatrixOverride
-                && !controller.isFiveThirdMode
-                && controller.override == choice.state
+            && !controller.isMatrixOverride
+            && !controller.isFiveThirdMode
+            && controller.override == choice.state
         ))
     }
 }
@@ -143,7 +143,7 @@ struct PresenceChoice: Identifiable {
     let id: String
     let title: String
     let state: PresenceState?
-
+    
     static let all = [
         PresenceChoice(id: "auto", title: "Auto", state: nil),
         PresenceChoice(id: "available", title: "Available", state: .available),
@@ -157,9 +157,9 @@ struct PresenceChoice: Identifiable {
 @MainActor
 final class CustomColorPanelPresenter: NSObject {
     static let shared = CustomColorPanelPresenter()
-
+    
     private weak var controller: AppController?
-
+    
     func show(controller: AppController) {
         self.controller = controller
         let panel = NSColorPanel.shared
@@ -171,7 +171,7 @@ final class CustomColorPanelPresenter: NSObject {
         NSApplication.shared.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
     }
-
+    
     @objc private func colorDidChange(_ sender: NSColorPanel) {
         controller?.setCustomColor(Color(sender.color))
     }
@@ -179,7 +179,7 @@ final class CustomColorPanelPresenter: NSObject {
 
 struct PresenceChipButtonStyle: ButtonStyle {
     let isSelected: Bool
-
+    
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.caption)
@@ -195,7 +195,7 @@ struct PresenceChipButtonStyle: ButtonStyle {
 
 struct BrightnessSection: View {
     @ObservedObject var controller: AppController
-
+    
     var body: some View {
         VStack(spacing: 7) {
             HStack {
@@ -232,11 +232,11 @@ struct BrightnessSection: View {
 @MainActor
 final class DiagnosticsWindowPresenter {
     static let shared = DiagnosticsWindowPresenter()
-
+    
     private var window: NSWindow?
-
+    
     private init() {}
-
+    
     func show(controller: AppController) {
         if window == nil {
             let window = NSWindow(
@@ -251,7 +251,7 @@ final class DiagnosticsWindowPresenter {
             window.center()
             self.window = window
         }
-
+        
         NSApplication.shared.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
     }
@@ -433,8 +433,14 @@ final class AppController: ObservableObject {
             tick()
         }
     } }
-    private func setLoginItem() { do { if startAtLogin { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() } } catch { Logger(subsystem: "com.example.TeamsLight", category: "app").error("Login item update failed") } }
-
+    private func setLoginItem() {
+        do {
+            if startAtLogin {
+                try SMAppService.mainApp.register() } else {
+                    try SMAppService.mainApp.unregister()
+                }
+        } catch { Logger(subsystem: "com.example.TeamsLight", category: "app").error("Login item update failed") } }
+    
     var displayTitle: String {
         if isMatrixOverride { return "Custom Matrix" }
         if isFiveThirdMode { return "5/3 Matrix" }
@@ -449,12 +455,12 @@ final class AppController: ObservableObject {
         if isMatrixOverride || isFiveThirdMode { return "square.grid.3x3.fill" }
         return isCustomColorOverride ? "paintpalette.fill" : state.menuBarSystemImage
     }
-
+    
     private var customColorCommand: USBCommand {
         let color = customColorComponents
         return .color(color.red, color.green, color.blue)
     }
-
+    
     private var customColorComponents: (red: UInt8, green: UInt8, blue: UInt8) {
         guard let color = NSColor(customColor).usingColorSpace(.deviceRGB) else {
             return (128, 0, 128)
@@ -471,7 +477,7 @@ enum OutputDestination: String, CaseIterable, Identifiable {
     case esp32
     case busylight
     case both
-
+    
     var id: Self { self }
     var title: String {
         switch self {
@@ -486,7 +492,19 @@ enum OutputDestination: String, CaseIterable, Identifiable {
 
 struct DiagnosticsView: View {
     @ObservedObject var controller: AppController
-    var body: some View { Form { LabeledContent("Resolved status", value: controller.state.title); LabeledContent("ESP32 USB", value: controller.deviceName ?? "not connected"); LabeledContent("Kuando Busylight", value: controller.busylightDeviceName ?? "not connected"); LabeledContent("Serial response", value: controller.transportLastResponse); Section("Raw provider states") { ForEach(controller.signals, id: \.provider) { signal in LabeledContent(signal.provider, value: "\(signal.state.title): \(signal.detail)") } } }.padding().frame(minWidth: 500) }
+    var body: some View {
+        Form {
+            LabeledContent("Resolved status", value: controller.state.title);
+            LabeledContent("ESP32 USB", value: controller.deviceName ?? "not connected");
+            LabeledContent("Kuando Busylight", value: controller.busylightDeviceName ?? "not connected");
+            LabeledContent("Serial response", value: controller.transportLastResponse);
+            Section("Raw provider states") {
+                ForEach(controller.signals, id: \.provider) { signal in
+                    LabeledContent(signal.provider, value: "\(signal.state.title): \(signal.detail)")
+                }
+            }
+        }
+        .padding().frame(minWidth: 500) }
 }
 
 private extension AppController { var transportLastResponse: String { transport.lastResponse } }
