@@ -6,6 +6,8 @@ enum USBCommand: Equatable, Sendable {
     case color(UInt8, UInt8, UInt8)
     case matrix(LEDMatrix)
     case pixel(MatrixCoordinate, LEDColor)
+    case calibrate(rotation: Int, serpentine: Bool)
+    case resetCalibration
     case ping, status, info, fiveThree, off
     
     var wireValue: String {
@@ -16,6 +18,8 @@ enum USBCommand: Equatable, Sendable {
         case .matrix(let matrix): return "MATRIX \(matrix.hexPayload)"
         case .pixel(let coordinate, let color):
             return "PIXEL \(coordinate.row) \(coordinate.column) \(color.red) \(color.green) \(color.blue)"
+        case .calibrate(let rotation, let serpentine): return "CALIBRATE \(rotation) \(serpentine ? 1 : 0)"
+        case .resetCalibration: return "CALIBRATE DEFAULT"
         case .ping: return "PING"; case .status: return "STATUS"; case .info: return "INFO"; case .fiveThree: return "FIVE_THREE"; case .off: return "OFF"
         }
     }

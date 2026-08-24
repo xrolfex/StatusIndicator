@@ -108,13 +108,16 @@ The ESP32 accepts newline-delimited UTF-8 serial commands:
 ```text
 AVAILABLE  BUSY  IN_CALL  IN_MEETING  DND  PRESENTING  AWAY  OFFLINE  UNKNOWN
 PING  STATUS  INFO  BRIGHTNESS 0..15  COLOR R G B  FIVE_THREE  OFF
+CALIBRATE ROTATION SERPENTINE
 PIXEL ROW COLUMN R G B
 MATRIX <64 contiguous RRGGBB values>
 ```
 
 `ROW` and `COLUMN` are zero-based logical coordinates from `0` through `7`. A `MATRIX` payload is exactly 384 hexadecimal characters in logical row-major order; the firmware applies the configured rotation and serpentine wiring. `PIXEL` and `MATRIX` enter custom matrix mode, and a normal state command restores presence rendering.
 
-The firmware responds with `PONG`, `OK …`, or `ERR …`. `INFO` reports the protocol version and matrix capability, which the macOS app displays in Diagnostics. `COLOR` is a temporary diagnostic mode. `FIVE_THREE` displays the special matrix mark.
+The firmware responds with `PONG`, `OK …`, or `ERR …`. `INFO` reports the protocol version plus configured matrix width, height, and pixel count, which the macOS app uses to build its editor. `COLOR` is a temporary diagnostic mode. `FIVE_THREE` displays the special matrix mark.
+
+`CALIBRATE` accepts a rotation of `0`, `90`, `180`, or `270` and a serpentine value of `0` or `1`. The board stores this mapping in its local nonvolatile storage, so the Matrix Calibration controls in the macOS app survive a restart. Quarter-turn rotations require a square matrix.
 
 ## Development and verification
 

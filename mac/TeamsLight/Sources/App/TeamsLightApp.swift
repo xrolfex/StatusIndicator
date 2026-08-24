@@ -1,6 +1,15 @@
 import ServiceManagement
 import SwiftUI
 import os
+import AVFoundation
+import EventKit
+
+@MainActor
+func bringToForeground(_ window: NSWindow) {
+    NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+    window.orderFrontRegardless()
+    window.makeKeyAndOrderFront(nil)
+}
 
 @main
 struct TeamsLightApp: App {
@@ -45,40 +54,10 @@ struct StatusHeader: View {
             }
             Spacer()
             Menu {
-                Picker("Output", selection: $controller.outputDestination) {
-                    ForEach(OutputDestination.allCases) { destination in
-                        Text(destination.title).tag(destination)
-                    }
-                }
-                Menu("Automatic Detection") {
-                    Toggle("Use Microphone", isOn: Binding(
-                        get: { controller.presencePolicy.useMicrophone },
-                        set: { enabled in controller.setPresencePolicy { $0.useMicrophone = enabled } }
-                    ))
-                    Toggle("Use Camera", isOn: Binding(
-                        get: { controller.presencePolicy.useCamera },
-                        set: { enabled in controller.setPresencePolicy { $0.useCamera = enabled } }
-                    ))
-                    Toggle("Use Idle Time", isOn: Binding(
-                        get: { controller.presencePolicy.useIdleTime },
-                        set: { enabled in controller.setPresencePolicy { $0.useIdleTime = enabled } }
-                    ))
-                    Divider()
-                    Toggle("Require Teams for Call Activity", isOn: Binding(
-                        get: { controller.presencePolicy.requireTeamsForCallActivity },
-                        set: { enabled in controller.setPresencePolicy { $0.requireTeamsForCallActivity = enabled } }
-                    ))
-                    Divider()
-                    Picker("Change Delay", selection: $controller.automaticTransitionDelay) {
-                        Text("No Delay").tag(0.0)
-                        Text("10 Seconds").tag(10.0)
-                        Text("30 Seconds").tag(30.0)
-                    }
-                }
-                Picker("When Locked or Asleep", selection: $controller.inactiveDisplayBehavior) {
-                    ForEach(InactiveDisplayBehavior.allCases) { behavior in
-                        Text(behavior.title).tag(behavior)
-                    }
+                Button {
+                    SettingsWindowPresenter.shared.show(controller: controller)
+                } label: {
+                    Label("Open Settings…", systemImage: "gearshape")
                 }
                 Divider()
                 Button {
@@ -87,32 +66,37 @@ struct StatusHeader: View {
                     Label("Diagnostics", systemImage: "waveform.path.ecg")
                 }
                 Button {
-                    LEDMatrixWindowPresenter.shared.show(controller: controller)
+                    DeskDisplayWindowPresenter.shared.show(controller: controller)
                 } label: {
-                    Label("LED Matrix Editor…", systemImage: "square.grid.3x3.fill")
+                    Label("Desk Display…", systemImage: "sparkles")
                 }
-                .disabled(!controller.outputDestination.usesESP32)
-                Button {
-                    MatrixPresetWindowPresenter.shared.show(controller: controller)
-                } label: {
-                    Label("Matrix Presets…", systemImage: "square.grid.2x2")
-                }
-                .disabled(!controller.outputDestination.usesESP32)
-                Toggle(
-                    "5/3 Matrix Mode",
-                    isOn: Binding(
-                        get: { controller.isFiveThirdMode },
-                        set: { controller.setFiveThirdMode($0) }
+                Menu("Matrix & Appearance") {
+                    Button {
+                        MatrixPresetWindowPresenter.shared.show(controller: controller)
+                    } label: {
+                        Label("Matrix Presets…", systemImage: "square.grid.2x2")
+                    }
+                    .disabled(!controller.outputDestination.usesESP32)
+                    Button {
+                        LEDMatrixWindowPresenter.shared.show(controller: controller)
+                    } label: {
+                        Label("LED Matrix Editor…", systemImage: "square.grid.3x3.fill")
+                    }
+                    .disabled(!controller.outputDestination.usesESP32)
+                    Toggle(
+                        "5/3 Matrix Pattern",
+                        isOn: Binding(
+                            get: { controller.isFiveThirdMode },
+                            set: { controller.setFiveThirdMode($0) }
+                        )
                     )
-                )
-                .disabled(!controller.outputDestination.usesESP32)
-                Divider()
-                Button {
-                    CustomColorPanelPresenter.shared.show(controller: controller)
-                } label: {
-                    Label("Custom Color…", systemImage: "paintpalette")
+                    .disabled(!controller.outputDestination.usesESP32 || !controller.supportsFiveThree)
+                    Button {
+                        CustomColorPanelPresenter.shared.show(controller: controller)
+                    } label: {
+                        Label("Custom Color…", systemImage: "paintpalette")
+                    }
                 }
-                Toggle("Start at Login", isOn: $controller.startAtLogin)
                 Divider()
                 Button("Quit Teams Light") {
                     NSApplication.shared.terminate(nil)
@@ -195,7 +179,8 @@ final class CustomColorPanelPresenter: NSObject {
         panel.isContinuous = true
         panel.setTarget(self)
         panel.setAction(#selector(colorDidChange(_:)))
-        NSApplication.shared.activate(ignoringOtherApps: true)
+        NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+        panel.orderFrontRegardless()
         panel.makeKeyAndOrderFront(nil)
     }
     
@@ -279,8 +264,199 @@ final class DiagnosticsWindowPresenter {
             self.window = window
         }
         
-        NSApplication.shared.activate(ignoringOtherApps: true)
-        window?.makeKeyAndOrderFront(nil)
+        if let window { bringToForeground(window) }
+    }
+}
+
+@MainActor
+final class SettingsWindowPresenter {
+    static let shared = SettingsWindowPresenter()
+    private var window: NSWindow?
+    private init() {}
+
+    func show(controller: AppController) {
+        if window == nil {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 560, height: 520),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "Teams Light Settings"
+            window.contentView = NSHostingView(rootView: SettingsView(controller: controller))
+            window.isReleasedWhenClosed = false
+            window.center()
+            self.window = window
+        }
+        if let window { bringToForeground(window) }
+    }
+}
+
+struct SettingsView: View {
+    @ObservedObject var controller: AppController
+
+    var body: some View {
+        Form {
+            Section("Quick Start") {
+                Text("1. Connect the matrix with a data-capable USB cable.  2. Choose ESP32 output.  3. Open Matrix Calibration and run the corner test.  4. Return to Presence when the pattern looks correct.")
+                    .font(.callout)
+                Button("Open Diagnostics") { DiagnosticsWindowPresenter.shared.show(controller: controller) }
+            }
+            Section("Permissions & Privacy") {
+                ForEach(controller.permissionSummary, id: \.name) { permission in
+                    LabeledContent(permission.name, value: permission.status)
+                }
+                Text("Permissions are optional. Calendar, microphone, and screen access are only requested when their related features are enabled.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Output Devices") {
+                Picker("Output", selection: $controller.outputDestination) {
+                    ForEach(OutputDestination.allCases) { Text($0.title).tag($0) }
+                }
+                Picker("ESP32", selection: $controller.selectedESP32Path) {
+                    Text("Automatic").tag("")
+                    ForEach(controller.availableESP32Paths, id: \.self) { Text($0).tag($0) }
+                }
+                Picker("Busylight", selection: $controller.selectedBusylightID) {
+                    Text("All Compatible Devices").tag("")
+                    ForEach(controller.availableBusylights) { Text($0.name).tag($0.id) }
+                }
+            }
+            Section("Automatic Detection") {
+                Toggle("Use Microphone", isOn: policyBinding(\.useMicrophone))
+                Toggle("Use Camera", isOn: policyBinding(\.useCamera))
+                Toggle("Use Idle Time", isOn: policyBinding(\.useIdleTime))
+                Toggle("Require Teams for Call Activity", isOn: policyBinding(\.requireTeamsForCallActivity))
+                Picker("Change Delay", selection: $controller.automaticTransitionDelay) {
+                    Text("No Delay").tag(0.0); Text("10 Seconds").tag(10.0); Text("30 Seconds").tag(30.0)
+                }
+            }
+            Section("Behavior") {
+                Picker("When Locked or Asleep", selection: $controller.inactiveDisplayBehavior) {
+                    ForEach(InactiveDisplayBehavior.allCases) { Text($0.title).tag($0) }
+                }
+                Picker("Return to Auto", selection: $controller.manualOverrideTimeout) {
+                    Text("Never").tag(0.0); Text("After 15 Minutes").tag(900.0); Text("After 30 Minutes").tag(1800.0); Text("After 1 Hour").tag(3600.0)
+                }
+                Toggle("Start at Login", isOn: $controller.startAtLogin)
+            }
+            Section("Desk Display") {
+                Toggle("Use live microphone level for Audio Meter scenes", isOn: $controller.audioReactiveEnabled)
+                Toggle("Use Calendar for upcoming-meeting scenes", isOn: $controller.calendarIntegrationEnabled)
+                Text("Calendar access is optional. Teams Light only requests it after you turn this on, and only reads the next event locally.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button("Open Desk Display…") { DeskDisplayWindowPresenter.shared.show(controller: controller) }
+            }
+            Section("Scene Safety & Priority") {
+                Picker("When scenes conflict", selection: $controller.scenePriority) { ForEach(ScenePriority.allCases) { Text($0.title).tag($0) } }
+                HStack { Text("Maximum scene speed"); Slider(value: $controller.sceneSafetyLimits.maximumFramesPerSecond, in: 1...10, step: 1); Text("\(Int(controller.sceneSafetyLimits.maximumFramesPerSecond)) fps") }
+                HStack { Text("Maximum scene intensity"); Slider(value: $controller.sceneSafetyLimits.maximumIntensity, in: 10...100, step: 5); Text("\(Int(controller.sceneSafetyLimits.maximumIntensity))%") }
+                Text("Safety limits cap every scene before it is sent to the USB matrix.").font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Matrix Calibration") {
+                Picker("Orientation", selection: Binding(get: { controller.calibrationRotation }, set: { controller.setMatrixCalibration(rotation: $0, serpentine: controller.calibrationSerpentine) })) {
+                    Text("0°").tag(0); Text("90°").tag(90); Text("180°").tag(180); Text("270°").tag(270)
+                }
+                .disabled(!controller.supportsMatrixCalibration)
+                Toggle("Serpentine wiring", isOn: Binding(get: { controller.calibrationSerpentine }, set: { controller.setMatrixCalibration(rotation: controller.calibrationRotation, serpentine: $0) }))
+                    .disabled(!controller.supportsMatrixCalibration)
+                Button("Show Corner Test Pattern") { controller.showCalibrationTestPattern() }
+                    .disabled(!controller.outputDestination.usesESP32)
+                Button("Restore Board Default Mapping") { controller.resetMatrixCalibration() }
+                    .disabled(!controller.supportsMatrixCalibration)
+                Text(controller.supportsMatrixCalibration ? "Changes apply immediately and are useful for checking panel orientation or row wiring." : "Connect current protocol firmware to calibrate the matrix.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text("Corner-test guide: red = top-left, green = top-right, blue = bottom-left, white = bottom-right. Adjust orientation and serpentine wiring until these match.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("State Appearance") {
+                HStack {
+                    Text("State").frame(width: 88, alignment: .leading)
+                    Text("ESP32").frame(width: 64)
+                    Text("Busylight").frame(width: 64)
+                    Text("ESP32 %").frame(width: 52)
+                    Text("Busylight %").frame(width: 52)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                ForEach(PresenceState.allCases, id: \.rawValue) { state in
+                    HStack {
+                        Text(state.title).frame(width: 88, alignment: .leading)
+                        ColorPicker("ESP32", selection: profileColorBinding(state, \.esp32Color), supportsOpacity: false)
+                            .labelsHidden().accessibilityLabel("ESP32 color for \(state.title)")
+                        ColorPicker("Busylight", selection: profileColorBinding(state, \.busylightColor), supportsOpacity: false)
+                            .labelsHidden().accessibilityLabel("Busylight color for \(state.title)")
+                        Slider(value: profileBrightnessBinding(state, \.esp32Brightness), in: 0...100)
+                            .frame(width: 52)
+                            .help("ESP32 brightness for \(state.title)")
+                            .accessibilityLabel("ESP32 brightness for \(state.title)")
+                        Slider(value: profileBrightnessBinding(state, \.busylightBrightness), in: 0...100)
+                            .frame(width: 52)
+                            .help("Busylight brightness for \(state.title)")
+                            .accessibilityLabel("Busylight brightness for \(state.title)")
+                        Button("Reset") { controller.resetAppearanceProfile(for: state) }
+                            .disabled(controller.appearanceProfiles[state.rawValue] == nil)
+                    }
+                }
+                Text("Each device has its own color and brightness. Brightness is multiplied by the global brightness setting.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Backup") {
+                Button("Export Full Settings Backup…") { exportBackup() }
+                Button("Import Full Settings Backup…") { importBackup() }
+                Text("Includes scenes, presets, scene controls, rules, appearance profiles, matrix frame, calibration, detection policy, and safety settings.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("What’s New") {
+                Text("Desk Display now includes live previews, scene safety limits, configurable priority, calibration guidance, and privacy-first permission controls.")
+                    .font(.callout)
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+        .frame(minWidth: 520, minHeight: 480)
+    }
+
+    private func policyBinding(_ keyPath: WritableKeyPath<LocalPresencePolicy, Bool>) -> Binding<Bool> {
+        Binding(
+            get: { controller.presencePolicy[keyPath: keyPath] },
+            set: { value in controller.setPresencePolicy { $0[keyPath: keyPath] = value } }
+        )
+    }
+    private func profileColorBinding(_ state: PresenceState, _ keyPath: WritableKeyPath<StateAppearanceProfile, LEDColor>) -> Binding<Color> {
+        Binding(
+            get: {
+                let color = controller.appearanceProfile(for: state)[keyPath: keyPath]
+                return Color(red: Double(color.red) / 255, green: Double(color.green) / 255, blue: Double(color.blue) / 255)
+            },
+            set: { color in
+                guard let converted = NSColor(color).usingColorSpace(.deviceRGB) else { return }
+                func byte(_ value: CGFloat) -> UInt8 { UInt8((min(1, max(0, value)) * 255).rounded()) }
+                var profile = controller.appearanceProfile(for: state)
+                profile[keyPath: keyPath] = LEDColor(red: byte(converted.redComponent), green: byte(converted.greenComponent), blue: byte(converted.blueComponent))
+                controller.setAppearanceProfile(profile, for: state)
+            }
+        )
+    }
+    private func profileBrightnessBinding(_ state: PresenceState, _ keyPath: WritableKeyPath<StateAppearanceProfile, Double>) -> Binding<Double> {
+        Binding(
+            get: { controller.appearanceProfile(for: state)[keyPath: keyPath] },
+            set: { value in
+                var profile = controller.appearanceProfile(for: state)
+                profile[keyPath: keyPath] = value
+                controller.setAppearanceProfile(profile, for: state)
+            }
+        )
+    }
+    private func exportBackup() {
+        let panel = NSSavePanel(); panel.nameFieldStringValue = "TeamsLight-Backup.json"; panel.allowedContentTypes = [.json]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        try? controller.exportBackup(to: url)
+    }
+    private func importBackup() {
+        let panel = NSOpenPanel(); panel.allowedContentTypes = [.json]; panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        _ = controller.importBackup(from: url)
     }
 }
 
@@ -300,6 +476,17 @@ final class AppController: ObservableObject {
         static let requireTeams = "presencePolicy.requireTeams"
         static let transitionDelay = "presenceTransitionDelay"
         static let inactiveBehavior = "inactiveDisplayBehavior"
+        static let overrideTimeout = "manualOverrideTimeout"
+        static let esp32Path = "selectedESP32Path"
+        static let busylightID = "selectedBusylightID"
+        static let appearanceProfiles = "stateAppearanceProfiles"
+        static let customScenes = "deskDisplay.customScenes"
+        static let sceneRules = "deskDisplay.sceneRules"
+        static let sceneOptions = "deskDisplay.sceneOptions"
+        static let sceneSafety = "deskDisplay.sceneSafety"
+        static let scenePriority = "deskDisplay.scenePriority"
+        static let audioReactive = "deskDisplay.audioReactive"
+        static let calendarIntegration = "deskDisplay.calendarIntegration"
     }
     private let defaults = UserDefaults.standard
     @Published var state: PresenceState = .unknown
@@ -321,6 +508,7 @@ final class AppController: ObservableObject {
     @Published var customColor = Color.purple
     @Published var isCustomColorOverride = false
     @Published private(set) var matrix = LEDMatrix()
+    @Published private(set) var canUndoMatrix = false
     @Published private(set) var isMatrixOverride = false
     @Published var startAtLogin = false { didSet { setLoginItem() } }
     @Published var presencePolicy = LocalPresencePolicy() { didSet { persistPresencePolicy(); tick() } }
@@ -338,12 +526,38 @@ final class AppController: ObservableObject {
     @Published var inactiveDisplayBehavior: InactiveDisplayBehavior = .away {
         didSet { defaults.set(inactiveDisplayBehavior.rawValue, forKey: DefaultsKey.inactiveBehavior); setInactiveDisplay(isInactiveDisplay) }
     }
+    @Published var manualOverrideTimeout = 0.0 { didSet { defaults.set(manualOverrideTimeout, forKey: DefaultsKey.overrideTimeout) } }
+    @Published var selectedESP32Path = "" { didSet { defaults.set(selectedESP32Path, forKey: DefaultsKey.esp32Path); tick() } }
+    @Published var selectedBusylightID = "" { didSet { defaults.set(selectedBusylightID, forKey: DefaultsKey.busylightID); tick() } }
+    @Published private(set) var availableESP32Paths: [String] = []
+    @Published private(set) var availableBusylights: [BusylightDeviceDescriptor] = []
+    @Published private(set) var appearanceProfiles: [String: StateAppearanceProfile] = [:]
+    @Published private(set) var calibrationRotation = 0
+    @Published private(set) var calibrationSerpentine = false
+    @Published private(set) var customScenes: [DisplayScene] = []
+    @Published private(set) var sceneOptions: [UUID: SceneOptions] = [:]
+    @Published private(set) var activeScene: DisplayScene?
+    @Published private(set) var notifications: [DeskNotification] = []
+    @Published private(set) var displayOwner = "Presence"
+    @Published var sceneSafetyLimits = SceneSafetyLimits() { didSet { persistSceneSafetyLimits(); tick() } }
+    @Published var scenePriority: ScenePriority = .notificationsFirst { didSet { defaults.set(scenePriority.rawValue, forKey: DefaultsKey.scenePriority); tick() } }
+    @Published var sceneRules: [SceneRule] = [] { didSet { persistSceneRules(); tick() } }
+    @Published var audioReactiveEnabled = false { didSet { defaults.set(audioReactiveEnabled, forKey: DefaultsKey.audioReactive); audioReactiveEnabled ? audioMeter.start() : audioMeter.stop() } }
+    @Published var calendarIntegrationEnabled = false { didSet { defaults.set(calendarIntegrationEnabled, forKey: DefaultsKey.calendarIntegration); if calendarIntegrationEnabled { calendarMonitor.refreshIfNeeded() } else { calendarMonitor.clear() }; tick() } }
     private let transport = USBSerialTransport()
     private let busylight = KuandoBusylightTransport()
     private let sampler = LocalPresenceSampler(); private let resolver = PresenceResolver()
+    private let calendarMonitor = CalendarMonitor()
+    private let audioMeter = AudioMeter()
     private var transitionFilter = PresenceTransitionFilter()
     private var isInactiveDisplay = false
+    private var overrideExpiryTask: Task<Void, Never>?
+    private var matrixUndoStack: [LEDMatrix] = []
     private var timer: Timer?
+    private var lastSentESP32Command: String?
+    private var lastSentESP32Brightness: Int?
+    private var screenMatrix = LEDMatrix()
+    private var lastScreenCapture = Date.distantPast
     init() {
         if let rawValue = defaults.string(forKey: DefaultsKey.output), let destination = OutputDestination(rawValue: rawValue) {
             outputDestination = destination
@@ -373,10 +587,25 @@ final class AppController: ObservableObject {
         if let rawValue = defaults.string(forKey: DefaultsKey.inactiveBehavior), let behavior = InactiveDisplayBehavior(rawValue: rawValue) {
             inactiveDisplayBehavior = behavior
         }
+        if let timeout = defaults.object(forKey: DefaultsKey.overrideTimeout) as? Double, [0.0, 900.0, 1800.0, 3600.0].contains(timeout) {
+            manualOverrideTimeout = timeout
+        }
+        selectedESP32Path = defaults.string(forKey: DefaultsKey.esp32Path) ?? ""
+        selectedBusylightID = defaults.string(forKey: DefaultsKey.busylightID) ?? ""
+        if let data = defaults.data(forKey: DefaultsKey.appearanceProfiles), let restored = try? JSONDecoder().decode([String: StateAppearanceProfile].self, from: data) {
+            appearanceProfiles = restored
+        }
+        if let data = defaults.data(forKey: DefaultsKey.customScenes), let restored = try? JSONDecoder().decode([DisplayScene].self, from: data) { customScenes = restored }
+        if let data = defaults.data(forKey: DefaultsKey.sceneRules), let restored = try? JSONDecoder().decode([SceneRule].self, from: data) { sceneRules = restored }
+        if let data = defaults.data(forKey: DefaultsKey.sceneOptions), let restored = try? JSONDecoder().decode([UUID: SceneOptions].self, from: data) { sceneOptions = restored }
+        if let data = defaults.data(forKey: DefaultsKey.sceneSafety), let restored = try? JSONDecoder().decode(SceneSafetyLimits.self, from: data) { sceneSafetyLimits = restored }
+        if let raw = defaults.string(forKey: DefaultsKey.scenePriority), let restored = ScenePriority(rawValue: raw) { scenePriority = restored }
+        audioReactiveEnabled = defaults.object(forKey: DefaultsKey.audioReactive) as? Bool ?? false
+        calendarIntegrationEnabled = defaults.object(forKey: DefaultsKey.calendarIntegration) as? Bool ?? false
         transitionFilter.delay = automaticTransitionDelay
         startAtLogin = SMAppService.mainApp.status == .enabled
         tick()
-        timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
         NotificationCenter.default.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in Task { @MainActor in self?.setInactiveDisplay(true) } }
@@ -385,7 +614,9 @@ final class AppController: ObservableObject {
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("com.apple.screenIsUnlocked"), object: nil, queue: .main) { [weak self] _ in Task { @MainActor in self?.setInactiveDisplay(false) } }
     }
     func tick() {
+        availableESP32Paths = USBSerialTransport.candidatePaths()
         signals = sampler.sample(policy: presencePolicy)
+        if calendarIntegrationEnabled { calendarMonitor.refreshIfNeeded() }
         let resolved = resolver.resolve(signals)
         let next: PresenceState
         if let override {
@@ -395,27 +626,61 @@ final class AppController: ObservableObject {
             next = transitionFilter.resolve(resolved)
         }
         let displayState = isInactiveDisplay ? inactiveDisplayBehavior.presenceState ?? next : next
+        notifications.removeAll { $0.expiresAt <= .now }
+        let ruleScene = sceneRules.first(where: { $0.isEnabled && $0.condition.matches(state: next, signals: signals, upcomingMeeting: calendarIntegrationEnabled && calendarMonitor.hasUpcomingMeeting) }).flatMap { rule in
+            allScenes.first { $0.id == rule.sceneID }.map(configuredScene)
+        }
+        let selected = switch scenePriority {
+        case .notificationsFirst: (notifications.last?.scene, "Notification", activeScene, ruleScene)
+        case .manualFirst: (activeScene, "Manual scene", notifications.last?.scene, ruleScene)
+        case .automationFirst: (ruleScene, "Automation rule", notifications.last?.scene, activeScene)
+        }
+        let displayedScene = selected.0 ?? selected.2 ?? selected.3
+        displayOwner = displayedScene == nil ? (isMatrixOverride ? "Matrix editor" : isCustomColorOverride ? "Custom color" : "Presence") : (selected.0 != nil ? selected.1 : selected.2?.id == notifications.last?.scene.id ? "Notification" : selected.2?.id == activeScene?.id ? "Manual scene" : "Automation rule")
+        let profile = appearanceProfile(for: displayState)
         let retainsInactiveDisplay = isInactiveDisplay && inactiveDisplayBehavior == .retain
         let command: USBCommand
         if isInactiveDisplay {
             command = .presence(displayState)
+        } else if let displayedScene {
+            command = .matrix(sceneFrame(for: displayedScene))
         } else if isMatrixOverride {
             command = .matrix(matrix)
         } else if isFiveThirdMode {
             command = .fiveThree
         } else if isCustomColorOverride {
             command = customColorCommand
+        } else if hasCustomAppearance(for: next) {
+            command = .color(profile.esp32Color.red, profile.esp32Color.green, profile.esp32Color.blue)
         } else {
             command = .presence(next)
         }
         let destination = outputDestination
         Task {
-            if !retainsInactiveDisplay && destination.usesESP32 && !transport.isConnected { await transport.reconnect() }
+            await transport.setPreferredDevicePath(selectedESP32Path.isEmpty ? nil : selectedESP32Path)
+            await busylight.setSelectedDeviceID(selectedBusylightID.isEmpty ? nil : selectedBusylightID)
+            if !retainsInactiveDisplay && destination.usesESP32 && !transport.isConnected {
+                await transport.reconnect()
+                lastSentESP32Command = nil
+                lastSentESP32Brightness = nil
+            }
             if !retainsInactiveDisplay && destination.usesBusylight && !busylight.isConnected { await busylight.reconnect() }
             if !retainsInactiveDisplay && destination.usesESP32 && transport.isConnected {
                 // Ensure the special mark is rendered at its lowest visible brightness.
-                if isFiveThirdMode { await transport.send(USBCommand.brightness(1).wireValue) }
-                await transport.send(command.wireValue)
+                let brightnessLevel: Int
+                if isFiveThirdMode { brightnessLevel = 1 }
+                else {
+                    let multiplier = hasCustomAppearance(for: displayState) ? profile.esp32Brightness : 100
+                    brightnessLevel = Int((brightnessPercent * multiplier * 15 / 10_000).rounded())
+                }
+                if lastSentESP32Brightness != brightnessLevel {
+                    await transport.send(USBCommand.brightness(brightnessLevel).wireValue)
+                    lastSentESP32Brightness = brightnessLevel
+                }
+                if lastSentESP32Command != command.wireValue {
+                    await transport.send(command.wireValue)
+                    lastSentESP32Command = command.wireValue
+                }
             }
             if !retainsInactiveDisplay && destination.usesBusylight && busylight.isConnected {
                 if isInactiveDisplay {
@@ -428,12 +693,29 @@ final class AppController: ObservableObject {
                     let color = customColorComponents
                     await busylight.send(red: color.red, green: color.green, blue: color.blue, brightnessPercent: brightnessPercent)
                 } else {
-                    await busylight.send(displayState, brightnessPercent: brightnessPercent)
+                    if hasCustomAppearance(for: displayState) {
+                        await busylight.send(
+                            red: profile.busylightColor.red,
+                            green: profile.busylightColor.green,
+                            blue: profile.busylightColor.blue,
+                            brightnessPercent: brightnessPercent * profile.busylightBrightness / 100
+                        )
+                    } else {
+                        await busylight.send(displayState, brightnessPercent: brightnessPercent)
+                    }
                 }
             }
             connected = (destination.usesESP32 && transport.isConnected) || (destination.usesBusylight && busylight.isConnected)
             deviceName = transport.deviceName
             busylightDeviceName = busylight.deviceName
+            availableBusylights = busylight.availableDevices
+            if let geometry = transport.matrixCapabilities?.geometry, matrix.geometry != geometry {
+                configureMatrixGeometry(geometry)
+            }
+            if let capabilities = transport.matrixCapabilities {
+                calibrationRotation = capabilities.rotation
+                calibrationSerpentine = capabilities.serpentine
+            }
         }
         if next != state { Logger(subsystem: "com.example.TeamsLight", category: "presence").info("Presence changed \(self.state.rawValue) -> \(next.rawValue)"); state = next }
     }
@@ -442,7 +724,21 @@ final class AppController: ObservableObject {
         isMatrixOverride = false
         isCustomColorOverride = false
         override = state
+        scheduleOverrideExpiry(for: state)
         tick()
+    }
+    private func scheduleOverrideExpiry(for state: PresenceState?) {
+        overrideExpiryTask?.cancel()
+        guard state != nil, manualOverrideTimeout > 0 else { return }
+        let timeout = manualOverrideTimeout
+        overrideExpiryTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(timeout))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard self?.override == state else { return }
+                self?.setPresenceOverride(nil)
+            }
+        }
     }
     private func setInactiveDisplay(_ inactive: Bool) {
         isInactiveDisplay = inactive
@@ -481,8 +777,124 @@ final class AppController: ObservableObject {
         isMatrixOverride = true
         tick()
     }
+    var supportsMatrixCalibration: Bool { transport.matrixCapabilities != nil && !transport.isLegacyFirmware }
+    func setMatrixCalibration(rotation: Int, serpentine: Bool) {
+        guard supportsMatrixCalibration else { return }
+        calibrationRotation = rotation
+        calibrationSerpentine = serpentine
+        Task { await transport.send(USBCommand.calibrate(rotation: rotation, serpentine: serpentine).wireValue) }
+    }
+    func resetMatrixCalibration() {
+        Task {
+            await transport.send(USBCommand.resetCalibration.wireValue)
+            await transport.send(USBCommand.info.wireValue)
+            if let capabilities = transport.matrixCapabilities {
+                calibrationRotation = capabilities.rotation
+                calibrationSerpentine = capabilities.serpentine
+            }
+        }
+    }
+    func showCalibrationTestPattern() {
+        var test = LEDMatrix(geometry: matrix.geometry)
+        let lastRow = matrix.geometry.height - 1; let lastColumn = matrix.geometry.width - 1
+        test[MatrixCoordinate(row: 0, column: 0)] = .init(red: 255, green: 0, blue: 0)
+        test[MatrixCoordinate(row: 0, column: lastColumn)] = .init(red: 0, green: 255, blue: 0)
+        test[MatrixCoordinate(row: lastRow, column: 0)] = .init(red: 0, green: 0, blue: 255)
+        test[MatrixCoordinate(row: lastRow, column: lastColumn)] = .init(red: 255, green: 255, blue: 255)
+        applyMatrix(test)
+    }
+    var allScenes: [DisplayScene] { DisplayScene.builtIns + customScenes }
+    func configuredScene(_ scene: DisplayScene) -> DisplayScene {
+        guard let options = sceneOptions[scene.id] else { return scene }
+        var adjusted = options
+        adjusted.framesPerSecond = min(sceneSafetyLimits.maximumFramesPerSecond, adjusted.framesPerSecond)
+        adjusted.intensity = min(sceneSafetyLimits.maximumIntensity, adjusted.intensity)
+        return DisplayScene(id: scene.id, name: scene.name, animation: scene.animation, color: adjusted.color.scaled(by: adjusted.intensity / 100), text: adjusted.text, framesPerSecond: adjusted.framesPerSecond, frames: scene.frames, options: adjusted)
+    }
+    func options(for scene: DisplayScene) -> SceneOptions { sceneOptions[scene.id] ?? SceneOptions(scene: scene) }
+    func setOptions(_ options: SceneOptions, for scene: DisplayScene) {
+        sceneOptions[scene.id] = options
+        persistSceneOptions()
+        if activeScene?.id == scene.id { activeScene = configuredScene(scene) }
+        tick()
+    }
+    var nextMeetingSummary: String {
+        guard calendarIntegrationEnabled else { return "Calendar access is off" }
+        guard let title = calendarMonitor.nextMeetingTitle, let date = calendarMonitor.nextMeetingDate else { return "No upcoming calendar event" }
+        return "\(title) — \(date.formatted(date: .omitted, time: .shortened))"
+    }
+    func saveScene(name: String, animation: MatrixAnimation, color: LEDColor, text: String, framesPerSecond: Double) {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        customScenes.append(DisplayScene(name: name, animation: animation, color: color, text: text, framesPerSecond: framesPerSecond))
+        persistScenes()
+    }
+    func saveFrameAnimation(name: String, frames: [LEDMatrix], framesPerSecond: Double) {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, !frames.isEmpty else { return }
+        customScenes.append(DisplayScene(name: name, animation: .solid, color: .black, framesPerSecond: framesPerSecond, frames: frames.map(\.hexPayload)))
+        persistScenes()
+    }
+    func removeScene(_ scene: DisplayScene) {
+        customScenes.removeAll { $0.id == scene.id }
+        sceneRules.removeAll { $0.sceneID == scene.id }
+        if activeScene?.id == scene.id { activeScene = nil }
+        persistScenes()
+    }
+    func exportScenePack(to url: URL) throws {
+        let pack = ScenePack(formatVersion: 1, scenes: customScenes, rules: sceneRules)
+        try JSONEncoder().encode(pack).write(to: url, options: .atomic)
+    }
+    @discardableResult
+    func importScenePack(from url: URL) -> Int {
+        guard let data = try? Data(contentsOf: url), let pack = try? JSONDecoder().decode(ScenePack.self, from: data), pack.formatVersion == 1 else { return 0 }
+        let newScenes = pack.scenes.filter { candidate in !customScenes.contains(where: { $0.name == candidate.name && $0.frames == candidate.frames && $0.animation == candidate.animation }) }
+        customScenes.append(contentsOf: newScenes)
+        let sceneIDs = Set(allScenes.map(\.id))
+        let existingRuleIDs = Set(sceneRules.map(\.id))
+        sceneRules.append(contentsOf: pack.rules.filter { sceneIDs.contains($0.sceneID) && !existingRuleIDs.contains($0.id) })
+        persistScenes()
+        return newScenes.count
+    }
+    func activateScene(_ scene: DisplayScene) {
+        isFiveThirdMode = false; isCustomColorOverride = false; isMatrixOverride = false
+        activeScene = configuredScene(scene); tick()
+    }
+    func stopScene() { activeScene = nil; tick() }
+    func enqueueNotification(title: String, scene: DisplayScene, duration: Double = 8) {
+        notifications.append(DeskNotification(title: title, scene: scene, expiresAt: .now.addingTimeInterval(max(1, duration))))
+        tick()
+    }
+    func previewFrame(for scene: DisplayScene, at date: Date) -> LEDMatrix {
+        configuredScene(scene).frame(geometry: matrix.geometry, now: date, audioLevel: audioMeter.level)
+    }
+    private func sceneFrame(for scene: DisplayScene) -> LEDMatrix {
+        if scene.animation == .screenAmbient {
+            refreshScreenAmbientIfNeeded()
+            return screenMatrix.geometry == matrix.geometry ? screenMatrix : screenMatrix.resampled(to: matrix.geometry)
+        }
+        return scene.frame(geometry: matrix.geometry, audioLevel: audioMeter.level)
+    }
+    private func refreshScreenAmbientIfNeeded() {
+        guard Date().timeIntervalSince(lastScreenCapture) >= 1 else { return }
+        lastScreenCapture = .now
+        guard let image = CGDisplayCreateImage(CGMainDisplayID()),
+              let converted = MatrixImageConverter.matrix(from: NSImage(cgImage: image, size: .zero), geometry: matrix.geometry, scaling: .fill) else { return }
+        screenMatrix = converted
+    }
     func applyMatrixPreset(_ preset: MatrixPreset) {
-        matrix = preset.matrix
+        applyMatrix(preset.matrix)
+    }
+    func applyImportedImageMatrix(_ importedMatrix: LEDMatrix) {
+        applyMatrix(importedMatrix)
+    }
+    private func configureMatrixGeometry(_ geometry: MatrixGeometry) {
+        matrix = LEDMatrix(hexPayload: matrix.hexPayload, geometry: geometry) ?? LEDMatrix(geometry: geometry)
+        defaults.set(matrix.hexPayload, forKey: DefaultsKey.matrix)
+    }
+    private func applyMatrix(_ updatedMatrix: LEDMatrix) {
+        pushMatrixUndo()
+        matrix = updatedMatrix.resampled(to: matrix.geometry)
         defaults.set(matrix.hexPayload, forKey: DefaultsKey.matrix)
         isFiveThirdMode = false
         isCustomColorOverride = false
@@ -511,6 +923,7 @@ final class AppController: ObservableObject {
         )
         var updatedMatrix = matrix
         updatedMatrix.setColor(ledColor, at: coordinates)
+        pushMatrixUndo()
         let wasMatrixOverride = isMatrixOverride
         matrix = updatedMatrix
         defaults.set(updatedMatrix.hexPayload, forKey: DefaultsKey.matrix)
@@ -530,9 +943,25 @@ final class AppController: ObservableObject {
         }
     }
     func clearMatrix() {
-        matrix = LEDMatrix()
+        pushMatrixUndo()
+        matrix = LEDMatrix(geometry: matrix.geometry)
         defaults.set(matrix.hexPayload, forKey: DefaultsKey.matrix)
         activateMatrixEditor()
+    }
+    func undoMatrix() {
+        guard let previous = matrixUndoStack.popLast() else { return }
+        matrix = previous
+        canUndoMatrix = !matrixUndoStack.isEmpty
+        defaults.set(matrix.hexPayload, forKey: DefaultsKey.matrix)
+        isFiveThirdMode = false
+        isCustomColorOverride = false
+        isMatrixOverride = true
+        tick()
+    }
+    private func pushMatrixUndo() {
+        matrixUndoStack.append(matrix)
+        if matrixUndoStack.count > 20 { matrixUndoStack.removeFirst() }
+        canUndoMatrix = true
     }
     func setBrightness() {
         let deviceLevel = Int((brightnessPercent * 15 / 100).rounded())
@@ -551,11 +980,35 @@ final class AppController: ObservableObject {
         brightnessPercent = min(100, max(0, brightnessPercent + amount))
         setBrightness()
     }
+    func reconnectDevices() {
+        Task {
+            if outputDestination.usesESP32 { await transport.reconnect() }
+            if outputDestination.usesBusylight { await busylight.reconnect() }
+            connected = (outputDestination.usesESP32 && transport.isConnected) || (outputDestination.usesBusylight && busylight.isConnected)
+            deviceName = transport.deviceName
+            busylightDeviceName = busylight.deviceName
+            availableBusylights = busylight.availableDevices
+        }
+    }
     func setPresencePolicy(_ update: (inout LocalPresencePolicy) -> Void) {
         var updated = presencePolicy
         update(&updated)
         presencePolicy = updated
     }
+    func appearanceProfile(for state: PresenceState) -> StateAppearanceProfile {
+        appearanceProfiles[state.rawValue] ?? StateAppearanceProfiles.default(for: state)
+    }
+    func setAppearanceProfile(_ profile: StateAppearanceProfile, for state: PresenceState) {
+        appearanceProfiles[state.rawValue] = profile
+        persistAppearanceProfiles()
+        tick()
+    }
+    func resetAppearanceProfile(for state: PresenceState) {
+        appearanceProfiles.removeValue(forKey: state.rawValue)
+        persistAppearanceProfiles()
+        tick()
+    }
+    private func hasCustomAppearance(for state: PresenceState) -> Bool { appearanceProfiles[state.rawValue] != nil }
     private func setLoginItem() {
         do {
             if startAtLogin {
@@ -575,12 +1028,56 @@ final class AppController: ObservableObject {
         defaults.set(presencePolicy.useIdleTime, forKey: DefaultsKey.idle)
         defaults.set(presencePolicy.requireTeamsForCallActivity, forKey: DefaultsKey.requireTeams)
     }
+    private func persistAppearanceProfiles() {
+        guard let data = try? JSONEncoder().encode(appearanceProfiles) else { return }
+        defaults.set(data, forKey: DefaultsKey.appearanceProfiles)
+    }
+    private func persistScenes() {
+        guard let data = try? JSONEncoder().encode(customScenes) else { return }
+        defaults.set(data, forKey: DefaultsKey.customScenes)
+    }
+    private func persistSceneRules() {
+        guard let data = try? JSONEncoder().encode(sceneRules) else { return }
+        defaults.set(data, forKey: DefaultsKey.sceneRules)
+    }
+    private func persistSceneOptions() {
+        guard let data = try? JSONEncoder().encode(sceneOptions) else { return }
+        defaults.set(data, forKey: DefaultsKey.sceneOptions)
+    }
+    private func persistSceneSafetyLimits() {
+        guard let data = try? JSONEncoder().encode(sceneSafetyLimits) else { return }
+        defaults.set(data, forKey: DefaultsKey.sceneSafety)
+    }
+    func exportBackup(to url: URL) throws {
+        let backup = TeamsLightBackup(formatVersion: 1, brightness: brightnessPercent, matrixPayload: matrix.hexPayload, scenes: customScenes, rules: sceneRules, sceneOptions: sceneOptions, appearanceProfiles: appearanceProfiles, presencePolicy: presencePolicy, safetyLimits: sceneSafetyLimits, scenePriority: scenePriority, matrixPresets: MatrixPresetStore.backupData(), calibrationRotation: calibrationRotation, calibrationSerpentine: calibrationSerpentine)
+        try JSONEncoder().encode(backup).write(to: url, options: .atomic)
+    }
+    @discardableResult
+    func importBackup(from url: URL) -> Bool {
+        guard let data = try? Data(contentsOf: url), let backup = try? JSONDecoder().decode(TeamsLightBackup.self, from: data), backup.formatVersion == 1 else { return false }
+        brightnessPercent = backup.brightness
+        customScenes = backup.scenes; sceneRules = backup.rules; sceneOptions = backup.sceneOptions
+        appearanceProfiles = backup.appearanceProfiles; presencePolicy = backup.presencePolicy; sceneSafetyLimits = backup.safetyLimits; scenePriority = backup.scenePriority
+        if let presets = backup.matrixPresets { MatrixPresetStore.restoreBackupData(presets) }
+        setMatrixCalibration(rotation: backup.calibrationRotation, serpentine: backup.calibrationSerpentine)
+        if let restored = LEDMatrix(hexPayload: backup.matrixPayload) { applyMatrix(restored) }
+        persistScenes(); persistSceneRules(); persistSceneOptions(); persistAppearanceProfiles(); persistSceneSafetyLimits()
+        return true
+    }
+    var permissionSummary: [(name: String, status: String)] {
+        func media(_ status: AVAuthorizationStatus) -> String { switch status { case .authorized: "Allowed"; case .notDetermined: "Not requested"; case .denied, .restricted: "Not allowed"; @unknown default: "Unknown" } }
+        let calendar: String = switch EKEventStore.authorizationStatus(for: .event) { case .fullAccess, .writeOnly: "Allowed"; case .notDetermined: "Not requested"; case .denied, .restricted: "Not allowed"; @unknown default: "Unknown" }
+        return [("Microphone", media(AVCaptureDevice.authorizationStatus(for: .audio))), ("Camera", media(AVCaptureDevice.authorizationStatus(for: .video))), ("Calendar", calendarIntegrationEnabled ? calendar : "Off"), ("Screen Recording", CGPreflightScreenCaptureAccess() ? "Allowed" : "Not allowed")]
+    }
     
     var displayTitle: String {
+        if let notification = notifications.last { return notification.title }
+        if let activeScene { return activeScene.name }
         if isMatrixOverride { return "Custom Matrix" }
         if isFiveThirdMode { return "5/3 Matrix" }
         return isCustomColorOverride ? "Custom Color" : state.title
     }
+    var supportsFiveThree: Bool { matrix.geometry == .legacy }
     var displayAccentColor: Color {
         if isMatrixOverride { return .cyan }
         if isFiveThirdMode { return .green }
@@ -630,10 +1127,24 @@ struct DiagnosticsView: View {
     var body: some View {
         Form {
             LabeledContent("Resolved status", value: controller.state.title);
+            LabeledContent("Selected ESP32", value: controller.selectedESP32Path.isEmpty ? "automatic" : controller.selectedESP32Path);
+            LabeledContent("Selected Busylight", value: controller.selectedBusylightID.isEmpty ? "all compatible devices" : controller.selectedBusylightID);
             LabeledContent("ESP32 USB", value: controller.deviceName ?? "not connected");
             LabeledContent("Kuando Busylight", value: controller.busylightDeviceName ?? "not connected");
             LabeledContent("Serial response", value: controller.transportLastResponse);
             LabeledContent("Protocol response", value: controller.transportResponseStatus);
+            LabeledContent("Firmware", value: controller.transportFirmwareStatus);
+            LabeledContent("App version", value: controller.appVersion);
+            if let health = controller.transportFirmwareHealth {
+                LabeledContent("Firmware uptime", value: "\(health.uptimeSeconds / 3600)h \((health.uptimeSeconds % 3600) / 60)m")
+                LabeledContent("Free memory", value: "\(health.freeHeapBytes.formatted()) bytes")
+                LabeledContent("Reset reason", value: "\(health.resetReason)")
+            }
+            if let hint = controller.transportRecoveryHint {
+                LabeledContent("USB recovery", value: hint)
+            }
+            LabeledContent("Next calendar event", value: controller.nextMeetingSummary);
+            Button("Reconnect Devices") { controller.reconnectDevices() }
             Section("Raw provider states") {
                 ForEach(controller.signals, id: \.provider) { signal in
                     LabeledContent(signal.provider, value: "\(signal.state.title): \(signal.detail)")
@@ -652,6 +1163,14 @@ private extension AppController {
         case .error: "Firmware error"
         case .unknown: "Waiting for response"
         }
+    }
+    var transportFirmwareStatus: String { transport.isLegacyFirmware ? "Legacy compatible" : "Current protocol" }
+    var transportRecoveryHint: String? { transport.recoveryHint }
+    var transportFirmwareHealth: FirmwareHealth? { transport.firmwareHealth }
+    var appVersion: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "development"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+        return build.isEmpty ? version : "\(version) (\(build))"
     }
 }
 

@@ -70,3 +70,26 @@ protocol PresenceProvider: Sendable {
     var name: String { get }
     func sample() -> PresenceSignal
 }
+
+struct StateAppearanceProfile: Codable, Equatable, Sendable {
+    var esp32Color: LEDColor
+    var busylightColor: LEDColor
+    var esp32Brightness: Double = 100
+    var busylightBrightness: Double = 100
+}
+
+enum StateAppearanceProfiles {
+    static func `default`(for state: PresenceState) -> StateAppearanceProfile {
+        let color: LEDColor
+        switch state {
+        case .available: color = .init(red: 0, green: 255, blue: 0)
+        case .busy, .inCall, .inMeeting: color = .init(red: 255, green: 0, blue: 0)
+        case .dnd: color = .init(red: 255, green: 0, blue: 255)
+        case .presenting: color = .init(red: 170, green: 0, blue: 255)
+        case .away: color = .init(red: 255, green: 145, blue: 0)
+        case .offline: color = .black
+        case .unknown: color = .init(red: 64, green: 64, blue: 64)
+        }
+        return StateAppearanceProfile(esp32Color: color, busylightColor: color)
+    }
+}

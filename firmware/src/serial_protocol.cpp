@@ -1,5 +1,6 @@
 #include "serial_protocol.h"
 #include "presence_state.h"
+#include <esp_system.h>
 #include <cstdio>
 #include <cstring>
 
@@ -53,10 +54,32 @@ void SerialProtocol::handle(Stream& serial, char* line) {
   PresenceState state;
   if (parsePresence(line, state)) { leds_.setState(state); serial.printf("OK %s\n", presenceName(state)); return; }
   if (!strcmp(line, "PING")) { reply(serial, "PONG"); return; }
-  if (!strcmp(line, "INFO")) { reply(serial, "OK INFO TEAMSLIGHT_PROTOCOL 1 MATRIX_8X8"); return; }
+  if (!strcmp(line, "INFO")) {
+    serial.printf("OK INFO TEAMSLIGHT_PROTOCOL 4 MATRIX WIDTH %d HEIGHT %d PIXELS %d ROTATION %u SERPENTINE %u UPTIME %lu HEAP %u RESET %d\n",
+                  MATRIX_WIDTH, MATRIX_HEIGHT, LED_COUNT, leds_.rotation(), leds_.serpentine(),
+                  static_cast<unsigned long>(millis() / 1000), ESP.getFreeHeap(), static_cast<int>(esp_reset_reason()));
+    return;
+  }
   if (!strcmp(line, "STATUS")) { serial.printf("OK %s BRIGHTNESS %u\n", presenceName(leds_.state()), leds_.brightness()); return; }
+  if (!strcmp(line, "CALIBRATE DEFAULT")) {
+    leds_.resetCalibration();
+    serial.printf("OK CALIBRATE ROTATION %u SERPENTINE %u\n", leds_.rotation(), leds_.serpentine()); return;
+  }
+  int rotation, serpentine; char calibrationExtra;
+  if (sscanf(line, "CALIBRATE %d %d %c", &rotation, &serpentine, &calibrationExtra) >= 2) {
+    if (sscanf(line, "CALIBRATE %d %d %c", &rotation, &serpentine, &calibrationExtra) != 2 || (serpentine != 0 && serpentine != 1)) { reply(serial, "ERR MALFORMED_COMMAND"); return; }
+    if (!leds_.setCalibration(rotation, serpentine != 0)) { reply(serial, "ERR UNSUPPORTED_CALIBRATION"); return; }
+    serial.printf("OK CALIBRATE ROTATION %d SERPENTINE %d\n", rotation, serpentine); return;
+  }
   if (!strcmp(line, "OFF")) { leds_.off(); reply(serial, "OK OFF"); return; }
-  if (!strcmp(line, "FIVE_THREE")) { leds_.showFiveThird(); reply(serial, "OK FIVE_THREE"); return; }
+  if (!strcmp(line, "FIVE_THREE")) {
+#if MATRIX_WIDTH == 8 && MATRIX_HEIGHT == 8
+    leds_.showFiveThird(); reply(serial, "OK FIVE_THREE");
+#else
+    reply(serial, "ERR UNSUPPORTED_GEOMETRY");
+#endif
+    return;
+  }
   if (!strncmp(line, "MATRIX", 6)) {
     uint8_t rgbValues[LED_COUNT * 3];
     if (line[6] != ' ' || !parseMatrixPayload(line + 7, rgbValues, LED_COUNT)) {

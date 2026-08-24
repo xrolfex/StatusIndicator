@@ -101,7 +101,7 @@ struct IdlePresenceProvider: PresenceProvider {
 /// Controls which local signals contribute to automatic presence. The default
 /// keeps activity attribution conservative: a camera or microphone only means
 /// "in a call" while Teams is running.
-struct LocalPresencePolicy: Sendable, Equatable {
+struct LocalPresencePolicy: Codable, Sendable, Equatable {
     var useMicrophone = true
     var useCamera = true
     var useIdleTime = true

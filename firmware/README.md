@@ -40,7 +40,7 @@ Most WS2812B-64 panels use GRB pixels in a serpentine row layout. If the `FIVE_T
 
 The firmware never includes or initializes Wi-Fi or Bluetooth. It caps brightness at 15%. `COLOR` is a diagnostic mode; send a presence state to return to normal rendering.
 
-Send `INFO` over the serial connection to return `OK INFO TEAMSLIGHT_PROTOCOL 1 MATRIX_8X8`. This small capability handshake lets host software identify a compatible firmware build without relying on a USB port name.
+Send `INFO` over the serial connection to return the protocol version plus configured `WIDTH`, `HEIGHT`, and `PIXELS`. This lets host software build an editor for the connected matrix without relying on a USB port name. The 5/3 pattern is available only on 8×8 geometry.
 
 Custom matrices use logical, zero-based coordinates. `PIXEL ROW COLUMN R G B` updates one NeoPixel, while `MATRIX` accepts exactly 64 contiguous `RRGGBB` values in row-major order. Both commands apply the target's configured rotation and serpentine layout and remain active until a presence-state command is received.
 

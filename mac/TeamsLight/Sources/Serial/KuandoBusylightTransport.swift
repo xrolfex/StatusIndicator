@@ -1,6 +1,11 @@
 import Foundation
 import IOKit.hid
 
+struct BusylightDeviceDescriptor: Identifiable, Hashable, Sendable {
+    let id: String
+    let name: String
+}
+
 /// Protocol-compatible HID output for Kuando/Plenom Busylight Alpha and Omega devices.
 enum KuandoBusylightCommand {
     static let outputReportLength = 64
@@ -68,7 +73,9 @@ final class KuandoBusylightTransport: @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.example.TeamsLight.busylight")
     private var manager: IOHIDManager?
     private var devices: [IOHIDDevice] = []
+    private var selectedDeviceID: String?
     private(set) var deviceName: String?
+    private(set) var availableDevices: [BusylightDeviceDescriptor] = []
     var isConnected: Bool { !devices.isEmpty }
     
     func reconnect() async {
@@ -76,6 +83,17 @@ final class KuandoBusylightTransport: @unchecked Sendable {
             queue.async {
                 self.closeLocked()
                 self.connectLocked()
+                continuation.resume()
+            }
+        }
+    }
+    func setSelectedDeviceID(_ id: String?) async {
+        await withCheckedContinuation { continuation in
+            queue.async {
+                if self.selectedDeviceID != id {
+                    self.selectedDeviceID = id
+                    self.closeLocked()
+                }
                 continuation.resume()
             }
         }
@@ -111,11 +129,15 @@ final class KuandoBusylightTransport: @unchecked Sendable {
         IOHIDManagerSetDeviceMatchingMultiple(manager, matchers as CFArray)
         guard IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone)) == kIOReturnSuccess else { return }
         let matched = (IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice>) ?? []
-        devices = matched.filter { device in
+        let compatible = Array(matched.filter { device in
             let vendor = (IOHIDDeviceGetProperty(device, kIOHIDVendorIDKey as CFString) as? NSNumber)?.intValue ?? -1
             let product = (IOHIDDeviceGetProperty(device, kIOHIDProductIDKey as CFString) as? NSNumber)?.intValue ?? -1
             return KuandoBusylightCommand.matches(vendorID: vendor, productID: product)
-        }
+        })
+        availableDevices = compatible.map(descriptor(for:)).sorted { $0.name < $1.name }
+        devices = selectedDeviceID.map { selected in
+            compatible.filter { descriptor(for: $0).id == selected }
+        } ?? compatible
         self.manager = manager
         updateDeviceNameLocked()
     }
@@ -149,5 +171,15 @@ final class KuandoBusylightTransport: @unchecked Sendable {
         } else {
             deviceName = nil
         }
+    }
+    private func descriptor(for device: IOHIDDevice) -> BusylightDeviceDescriptor {
+        let vendor = (IOHIDDeviceGetProperty(device, kIOHIDVendorIDKey as CFString) as? NSNumber)?.intValue ?? 0
+        let product = (IOHIDDeviceGetProperty(device, kIOHIDProductIDKey as CFString) as? NSNumber)?.intValue ?? 0
+        let location = (IOHIDDeviceGetProperty(device, kIOHIDLocationIDKey as CFString) as? NSNumber)?.uint32Value ?? 0
+        let productName = IOHIDDeviceGetProperty(device, kIOHIDProductKey as CFString) as? String ?? "Kuando Busylight"
+        return BusylightDeviceDescriptor(
+            id: String(format: "%04X:%04X:%08X", vendor, product, location),
+            name: "\(productName) (\(String(format: "%08X", location)))"
+        )
     }
 }

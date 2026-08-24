@@ -1,5 +1,6 @@
 #include "led_controller.h"
 #include <algorithm>
+#include <Preferences.h>
 
 namespace {
 constexpr uint8_t kMaxBrightness = 15; // Supply/thermal-safe default cap for this 64 LED board.
@@ -11,27 +12,68 @@ uint8_t wave(uint32_t now, uint32_t periodMs, uint8_t low, uint8_t high) {
 }
 }
 
-void LedController::begin() { pixels_.begin(); pixels_.clear(); pixels_.show(); }
+void LedController::begin() {
+  Preferences preferences;
+  if (preferences.begin("teamslight", true)) {
+    rotation_ = preferences.getUShort("rotation", MATRIX_ROTATION);
+    serpentine_ = preferences.getBool("serpentine", MATRIX_SERPENTINE);
+    preferences.end();
+  }
+  // Never accept an invalid value from a corrupted or older NVS entry.
+  if ((rotation_ != 0 && rotation_ != 90 && rotation_ != 180 && rotation_ != 270) ||
+      ((rotation_ == 90 || rotation_ == 270) && MATRIX_WIDTH != MATRIX_HEIGHT)) {
+    rotation_ = MATRIX_ROTATION;
+    serpentine_ = MATRIX_SERPENTINE;
+  }
+  pixels_.begin(); pixels_.clear(); pixels_.show();
+}
 uint16_t LedController::pixelIndex(uint8_t row, uint8_t column) const {
   uint8_t physicalRow;
   uint8_t physicalColumn;
-#if MATRIX_ROTATION == 0
+  switch (rotation_) {
+  case 0:
   physicalRow = row;
   physicalColumn = column;
-#elif MATRIX_ROTATION == 90
+  break;
+  case 90:
   physicalRow = column;
   physicalColumn = MATRIX_WIDTH - 1 - row;
-#elif MATRIX_ROTATION == 180
+  break;
+  case 180:
   physicalRow = MATRIX_HEIGHT - 1 - row;
   physicalColumn = MATRIX_WIDTH - 1 - column;
-#else
+  break;
+  default:
   physicalRow = MATRIX_HEIGHT - 1 - column;
   physicalColumn = row;
-#endif
-#if MATRIX_SERPENTINE
-  if (physicalRow % 2 != 0) physicalColumn = MATRIX_WIDTH - 1 - physicalColumn;
-#endif
+  }
+  if (serpentine_ && physicalRow % 2 != 0) physicalColumn = MATRIX_WIDTH - 1 - physicalColumn;
   return physicalRow * MATRIX_WIDTH + physicalColumn;
+}
+bool LedController::setCalibration(uint16_t rotation, bool serpentine) {
+  if (rotation != 0 && rotation != 90 && rotation != 180 && rotation != 270) return false;
+  if ((rotation == 90 || rotation == 270) && MATRIX_WIDTH != MATRIX_HEIGHT) return false;
+  rotation_ = rotation;
+  serpentine_ = serpentine;
+  Preferences preferences;
+  if (preferences.begin("teamslight", false)) {
+    preferences.putUShort("rotation", rotation_);
+    preferences.putBool("serpentine", serpentine_);
+    preferences.end();
+  }
+  if (matrixMode_) renderMatrix(); else if (!diagnostic_) renderState(millis());
+  return true;
+}
+void LedController::resetCalibration() {
+  rotation_ = MATRIX_ROTATION;
+  serpentine_ = MATRIX_SERPENTINE;
+  Preferences preferences;
+  if (preferences.begin("teamslight", false)) {
+    preferences.remove("rotation");
+    preferences.remove("serpentine");
+    preferences.end();
+  }
+  if (matrixMode_) renderMatrix(); else if (!diagnostic_) renderState(millis());
 }
 void LedController::setState(PresenceState state) {
   state_ = state;

@@ -1,4 +1,5 @@
 import XCTest
+import AppKit
 @testable import TeamsLight
 
 final class PresenceResolverTests: XCTestCase {
@@ -90,6 +91,19 @@ final class PresenceResolverTests: XCTestCase {
         let restoredStore = MatrixPresetStore(defaults: defaults)
         XCTAssertEqual(restoredStore.customPresets, store.customPresets)
     }
+    func testImageConverterCreatesAnEightByEightRGBMatrix() {
+        let context = CGContext(
+            data: nil, width: 16, height: 8, bitsPerComponent: 8, bytesPerRow: 16 * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
+        )!
+        context.setFillColor(NSColor.blue.cgColor)
+        context.fill(CGRect(x: 0, y: 0, width: 16, height: 8))
+        let image = NSImage(cgImage: context.makeImage()!, size: NSSize(width: 16, height: 8))
+        let matrix = MatrixImageConverter.matrix(from: image, scaling: .fit)
+        XCTAssertEqual(matrix?.pixels.count, 64)
+        XCTAssertTrue(matrix?.pixels.contains { $0.red > 0 || $0.green > 0 || $0.blue > 0 } == true)
+    }
     func testLEDMatrixUsesLogicalRowMajorRGBPayload() {
         var matrix = LEDMatrix()
         matrix[MatrixCoordinate(row: 0, column: 0)] = LEDColor(red: 255, green: 0, blue: 128)
@@ -121,6 +135,47 @@ final class PresenceResolverTests: XCTestCase {
         XCTAssertEqual(matrix[MatrixCoordinate(row: 2, column: 3)], color)
         XCTAssertEqual(matrix[MatrixCoordinate(row: 0, column: 0)], .black)
         XCTAssertEqual(LEDMatrix.coordinates.count, LEDMatrix.count)
+    }
+    func testMatrixGeometryAndSavedArtworkResampleDynamically() {
+        let geometry = MatrixGeometry(width: 16, height: 8)
+        XCTAssertEqual(MatrixCapabilities.parse("OK INFO TEAMSLIGHT_PROTOCOL 2 MATRIX WIDTH 16 HEIGHT 8 PIXELS 128")?.geometry, geometry)
+        XCTAssertNil(MatrixCapabilities.parse("OK INFO MATRIX WIDTH 16 HEIGHT 8 PIXELS 64"))
+        var source = LEDMatrix(fill: .black)
+        source[MatrixCoordinate(row: 0, column: 0)] = LEDColor(red: 1, green: 2, blue: 3)
+        let resized = source.resampled(to: geometry)
+        XCTAssertEqual(resized.geometry, geometry)
+        XCTAssertEqual(resized.pixels.count, 128)
+        XCTAssertEqual(resized[MatrixCoordinate(row: 0, column: 0)], LEDColor(red: 1, green: 2, blue: 3))
+        var fill = LEDMatrix(geometry: geometry)
+        fill.fill(with: LEDColor(red: 10, green: 20, blue: 30))
+        XCTAssertEqual(fill.pixels.count, 128)
+    }
+    func testScenesProduceFramesForEveryAnimation() {
+        let geometry = MatrixGeometry(width: 10, height: 5)
+        for animation in MatrixAnimation.allCases {
+            let frame = animation.frame(geometry: geometry, color: LEDColor(red: 20, green: 100, blue: 200), progress: 0.4, text: "HI", audioLevel: 0.6)
+            XCTAssertEqual(frame.geometry, geometry)
+            XCTAssertEqual(frame.pixels.count, geometry.pixelCount)
+        }
+    }
+    func testScrollingSceneAdvancesInsteadOfRestartingEveryFrame() {
+        let scene = DisplayScene(name: "Message", animation: .scrollText, color: LEDColor(red: 255, green: 255, blue: 255), text: "HELLO", framesPerSecond: 8)
+        let start = Date(timeIntervalSinceReferenceDate: 0)
+        let first = scene.frame(geometry: .legacy, now: start)
+        let later = scene.frame(geometry: .legacy, now: start.addingTimeInterval(1))
+        XCTAssertNotEqual(first, later)
+    }
+    func testSceneOptionsRemainCompatibleWithOlderSavedOptions() throws {
+        let legacy = """
+        {"framesPerSecond":8,"color":{"red":1,"green":2,"blue":3},"text":"HELLO","intensity":75}
+        """.data(using: .utf8)!
+        let options = try JSONDecoder().decode(SceneOptions.self, from: legacy)
+        XCTAssertEqual(options.direction, 1)
+        XCTAssertEqual(options.trailLength, 1)
+        XCTAssertEqual(options.sparkleDensity, 20)
+        XCTAssertEqual(options.pulseMinimum, 15)
+        XCTAssertEqual(options.countdownDuration, 5)
+        XCTAssertEqual(ScenePriority.notificationsFirst.title, "Notifications First")
     }
     func testPresencePresentationAndSignalEquality() {
         XCTAssertEqual(PresenceState.inMeeting.title, "In Meeting")

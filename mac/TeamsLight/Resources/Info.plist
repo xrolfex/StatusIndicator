@@ -14,4 +14,6 @@
   <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
   <key>LSUIElement</key><true/>
   <key>NSCameraUsageDescription</key><string>Teams Light checks whether a camera is active to show busy status. It never captures or records video.</string>
+  <key>NSMicrophoneUsageDescription</key><string>Teams Light can show an optional live microphone level on Audio Meter scenes. Audio is analyzed locally and never recorded.</string>
+  <key>NSCalendarsUsageDescription</key><string>Teams Light can show a subtle warning before your next calendar meeting. Calendar details stay on this Mac.</string>
 </dict></plist>

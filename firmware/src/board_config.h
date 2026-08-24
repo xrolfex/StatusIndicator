@@ -30,9 +30,6 @@
 
 static_assert(LED_COUNT == MATRIX_WIDTH * MATRIX_HEIGHT,
               "LED_COUNT must match the matrix dimensions");
-static_assert(MATRIX_WIDTH == 8 && MATRIX_HEIGHT == 8,
-              "The 5/3 display currently requires an 8x8 matrix");
-
 #if MATRIX_SERPENTINE != 0 && MATRIX_SERPENTINE != 1
 #error "MATRIX_SERPENTINE must be 0 or 1"
 #endif
