@@ -14,7 +14,6 @@ class LedController {
   void setMatrix(const uint8_t* rgbValues);
   void setMatrixPixel(uint8_t row, uint8_t column, uint8_t red, uint8_t green, uint8_t blue);
   void showFiveThird();
-  void test();
   void off();
   void update(uint32_t nowMs);
 

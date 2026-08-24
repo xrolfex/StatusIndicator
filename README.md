@@ -82,12 +82,24 @@ The menu-bar popover includes:
 - Automatic or manual presence selection.
 - Brightness control.
 - A settings menu for choosing **ESP32**, **Busylight**, or **Both**.
-- Diagnostics and a Test Lights sequence (tests every selected output).
+- Diagnostics for connected outputs and local presence signals.
 - Optional Start at Login.
 - An **LED Matrix Editor** for selecting each ESP32 NeoPixel and assigning its RGB color.
 - A hidden-style **5/3 Matrix Mode**, available when ESP32 output is selected. It displays a low-brightness, 180°-oriented 5/3 mark on the matrix while all other LEDs remain off. Turning it off restores ordinary presence indication.
 
 The app reconnects USB devices after sleep/wake and transient disconnects. Camera access may require macOS permission and can be restricted by MDM.
+
+### First-use checklist and troubleshooting
+
+1. Flash the target firmware, disconnect it, then reconnect it directly to the Mac. The app verifies a candidate serial port with `PING`/`PONG`; it does not send presence commands to unknown serial devices.
+2. Set **Output** to the hardware you actually connected. The Diagnostics window names each discovered device and shows the most recent firmware acknowledgement, including `INFO` capability data.
+3. In **Automatic Detection**, leave **Require Teams for Call Activity** on unless you intentionally want any app using the microphone or camera to set the light Busy. Each signal can be disabled independently; the choices persist across relaunches.
+4. If an ESP32 does not appear, use a data-capable USB cable, close another serial monitor, and reconnect the board. For a Waveshare board that will not upload, follow the BOOT/RESET sequence above.
+5. If an external matrix is rotated or mirrored, change only `MATRIX_SERPENTINE` or `MATRIX_ROTATION` for the WROOM environment, rebuild, and retest with the Matrix Editor. Do not change wiring while the 5 V supply is energized.
+
+### Hardware build notes
+
+For the external WROOM build, plan for a short, adequately thick 5 V power lead sized for the matrix and a common ground between the ESP32 and matrix supply. Place the recommended 330–470 Ω resistor near the matrix `DIN` pin and the roughly 1000 µF capacitor across the matrix 5 V/GND input. An enclosure should leave strain relief for USB and the power lead, keep the controller clear of exposed matrix contacts, and avoid trapping heat around the LED panel. Start at the firmware’s 15% cap and verify the panel temperature before making any brightness changes.
 
 ## Firmware protocol
 
@@ -95,14 +107,14 @@ The ESP32 accepts newline-delimited UTF-8 serial commands:
 
 ```text
 AVAILABLE  BUSY  IN_CALL  IN_MEETING  DND  PRESENTING  AWAY  OFFLINE  UNKNOWN
-PING  STATUS  BRIGHTNESS 0..15  COLOR R G B  TEST  FIVE_THREE  OFF
+PING  STATUS  INFO  BRIGHTNESS 0..15  COLOR R G B  FIVE_THREE  OFF
 PIXEL ROW COLUMN R G B
 MATRIX <64 contiguous RRGGBB values>
 ```
 
 `ROW` and `COLUMN` are zero-based logical coordinates from `0` through `7`. A `MATRIX` payload is exactly 384 hexadecimal characters in logical row-major order; the firmware applies the configured rotation and serpentine wiring. `PIXEL` and `MATRIX` enter custom matrix mode, and a normal state command restores presence rendering.
 
-The firmware responds with `PONG`, `OK …`, or `ERR …`. `COLOR` and `TEST` are temporary diagnostic modes. `FIVE_THREE` displays the special matrix mark.
+The firmware responds with `PONG`, `OK …`, or `ERR …`. `INFO` reports the protocol version and matrix capability, which the macOS app displays in Diagnostics. `COLOR` is a temporary diagnostic mode. `FIVE_THREE` displays the special matrix mark.
 
 ## Development and verification
 

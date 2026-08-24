@@ -30,6 +30,120 @@ final class LEDMatrixWindowPresenter {
     }
 }
 
+@MainActor
+final class MatrixPresetWindowPresenter {
+    static let shared = MatrixPresetWindowPresenter()
+    private var window: NSWindow?
+
+    private init() {}
+
+    func show(controller: AppController) {
+        if window == nil {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 520, height: 560),
+                styleMask: [.titled, .closable, .miniaturizable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "Matrix Presets"
+            window.contentView = NSHostingView(rootView: MatrixPresetPickerView(controller: controller))
+            window.isReleasedWhenClosed = false
+            window.center()
+            self.window = window
+        }
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
+    }
+}
+
+struct MatrixPresetPickerView: View {
+    @ObservedObject var controller: AppController
+    @StateObject private var store = MatrixPresetStore()
+    @State private var newPresetName = "My Preset"
+
+    private var presets: [MatrixPreset] { MatrixPreset.builtIns + store.customPresets }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Matrix Presets")
+                .font(.title2.bold())
+            Text("Choose a preset to show it immediately, or save the current matrix as a reusable local preset.")
+                .foregroundStyle(.secondary)
+            ScrollView {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 12) {
+                    ForEach(presets) { preset in
+                        PresetTile(preset: preset, isCustom: !preset.isBuiltIn) {
+                            controller.applyMatrixPreset(preset)
+                        } onDelete: {
+                            store.remove(preset)
+                        }
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            Divider()
+            HStack {
+                TextField("Preset name", text: $newPresetName)
+                Button("Save Current") {
+                    store.save(name: newPresetName, matrix: controller.matrix)
+                }
+                .disabled(newPresetName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button("Use Presence") {
+                    controller.setPresenceOverride(nil)
+                }
+            }
+        }
+        .padding(24)
+        .frame(width: 520, height: 560)
+    }
+}
+
+private struct PresetTile: View {
+    let preset: MatrixPreset
+    let isCustom: Bool
+    let apply: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Button(action: apply) {
+                PresetThumbnail(matrix: preset.matrix)
+                    .padding(8)
+                    .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(.plain)
+            Text(preset.name)
+                .font(.caption)
+                .lineLimit(1)
+            if isCustom {
+                Button("Delete", role: .destructive, action: onDelete)
+                    .font(.caption2)
+                    .buttonStyle(.link)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Matrix preset \(preset.name)")
+    }
+}
+
+private struct PresetThumbnail: View {
+    let matrix: LEDMatrix
+
+    var body: some View {
+        Grid(horizontalSpacing: 2, verticalSpacing: 2) {
+            ForEach(0..<LEDMatrix.height, id: \.self) { row in
+                GridRow {
+                    ForEach(0..<LEDMatrix.width, id: \.self) { column in
+                        Rectangle()
+                            .fill(matrix[MatrixCoordinate(row: row, column: column)].displayColor)
+                            .frame(width: 11, height: 11)
+                    }
+                }
+            }
+        }
+    }
+}
+
 struct LEDMatrixEditorView: View {
     @ObservedObject var controller: AppController
     @State private var selectedPixels: Set<MatrixCoordinate> = [MatrixCoordinate(row: 0, column: 0)]

@@ -53,9 +53,9 @@ void SerialProtocol::handle(Stream& serial, char* line) {
   PresenceState state;
   if (parsePresence(line, state)) { leds_.setState(state); serial.printf("OK %s\n", presenceName(state)); return; }
   if (!strcmp(line, "PING")) { reply(serial, "PONG"); return; }
+  if (!strcmp(line, "INFO")) { reply(serial, "OK INFO TEAMSLIGHT_PROTOCOL 1 MATRIX_8X8"); return; }
   if (!strcmp(line, "STATUS")) { serial.printf("OK %s BRIGHTNESS %u\n", presenceName(leds_.state()), leds_.brightness()); return; }
   if (!strcmp(line, "OFF")) { leds_.off(); reply(serial, "OK OFF"); return; }
-  if (!strcmp(line, "TEST")) { leds_.test(); reply(serial, "OK TEST"); return; }
   if (!strcmp(line, "FIVE_THREE")) { leds_.showFiveThird(); reply(serial, "OK FIVE_THREE"); return; }
   if (!strncmp(line, "MATRIX", 6)) {
     uint8_t rgbValues[LED_COUNT * 3];

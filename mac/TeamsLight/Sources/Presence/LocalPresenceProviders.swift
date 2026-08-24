@@ -98,18 +98,60 @@ struct IdlePresenceProvider: PresenceProvider {
     }
 }
 
+/// Controls which local signals contribute to automatic presence. The default
+/// keeps activity attribution conservative: a camera or microphone only means
+/// "in a call" while Teams is running.
+struct LocalPresencePolicy: Sendable, Equatable {
+    var useMicrophone = true
+    var useCamera = true
+    var useIdleTime = true
+    var requireTeamsForCallActivity = true
+
+    func attributedActivityState(isActive: Bool, teamsRunning: Bool, state: PresenceState) -> PresenceState {
+        guard isActive && (teamsRunning || !requireTeamsForCallActivity) else { return .unknown }
+        return state
+    }
+}
+
 /// Combines public local signals. Teams + active mic is intentionally an inference, not app-level microphone attribution.
 struct LocalPresenceSampler: Sendable {
     private let teams = TeamsProcessPresenceProvider()
     private let microphone = MicrophonePresenceProvider()
     private let camera = CameraPresenceProvider()
     private let idle = IdlePresenceProvider()
-    func sample() -> [PresenceSignal] {
+    func sample(policy: LocalPresencePolicy = .init()) -> [PresenceSignal] {
         let teamSignal = teams.sample(); let micSignal = microphone.sample(); let cameraSignal = camera.sample()
-        var result = [teamSignal, cameraSignal, idle.sample()]
-        if micSignal.state == .busy && teamSignal.detail == "running" {
-            result.append(PresenceSignal(provider: "Teams + microphone", state: .inCall, detail: "inferred from active input"))
-        } else { result.append(micSignal) }
+        let teamsRunning = teamSignal.detail == "running"
+        var result = [teamSignal]
+        if policy.useCamera {
+            let cameraState = policy.attributedActivityState(isActive: cameraSignal.state == .busy, teamsRunning: teamsRunning, state: .busy)
+            if cameraState == .busy {
+                result.append(PresenceSignal(provider: "Camera activity", state: cameraState, detail: teamsRunning ? "camera active while Teams is running" : "camera device active"))
+            } else if cameraSignal.state == .busy {
+                result.append(PresenceSignal(provider: "Camera activity", state: .unknown, detail: "active, ignored because Teams is not running"))
+            } else {
+                result.append(cameraSignal)
+            }
+        }
+        if policy.useIdleTime { result.append(idle.sample()) }
+        if policy.useMicrophone {
+            let micState = policy.attributedActivityState(
+                isActive: micSignal.state == .busy,
+                teamsRunning: teamsRunning,
+                state: teamsRunning ? .inCall : .busy
+            )
+            if micState == .inCall {
+                result.append(PresenceSignal(provider: "Teams + microphone", state: micState, detail: "inferred from active input"))
+            } else if micState == .busy {
+                result.append(PresenceSignal(provider: "Microphone activity", state: micState, detail: "input device active"))
+            } else {
+                result.append(PresenceSignal(
+                    provider: micSignal.provider,
+                    state: micSignal.state == .busy ? .unknown : micSignal.state,
+                    detail: micSignal.state == .busy ? "active, ignored because Teams is not running" : micSignal.detail
+                ))
+            }
+        }
         return result
     }
 }

@@ -23,6 +23,7 @@ final class USBSerialTransport: SerialTransport, @unchecked Sendable {
     private var fd: Int32 = -1
     private(set) var deviceName: String?
     private(set) var lastResponse = "—"
+    private(set) var lastResponseKind: USBResponse = .unknown("—")
     var isConnected: Bool { fd >= 0 }
     private let queue = DispatchQueue(label: "com.example.TeamsLight.serial")
     
@@ -67,7 +68,16 @@ final class USBSerialTransport: SerialTransport, @unchecked Sendable {
                 nextPing = Date().addingTimeInterval(0.25)
             }
             let count = Darwin.read(candidate, &bytes, bytes.count)
-            if count > 0 { response += String(decoding: bytes[0..<Int(count)], as: UTF8.self); if response.contains("PONG") { fd = candidate; deviceName = path; lastResponse = "PONG"; return true } }
+            if count > 0 {
+                response += String(decoding: bytes[0..<Int(count)], as: UTF8.self)
+                if response.contains("PONG") {
+                    fd = candidate
+                    deviceName = path
+                    recordResponseLocked("PONG")
+                    _ = writeAndReadLocked("INFO\n", timeout: 0.35)
+                    return true
+                }
+            }
             usleep(20_000)
         }
         Darwin.close(candidate); return false
@@ -94,6 +104,43 @@ final class USBSerialTransport: SerialTransport, @unchecked Sendable {
                 return
             }
         }
+        _ = writeAndReadLocked(nil, timeout: 0.35)
+    }
+    /// Serial commands reply with one newline-delimited frame. Reading it here
+    /// gives Diagnostics useful errors and prevents stale replies accumulating
+    /// before the next command.
+    @discardableResult
+    private func writeAndReadLocked(_ text: String?, timeout: TimeInterval) -> String? {
+        if let text {
+            let data = Array(text.utf8)
+            let written = data.withUnsafeBufferPointer { Darwin.write(fd, $0.baseAddress, $0.count) }
+            guard written == data.count else { return nil }
+        }
+        let deadline = Date().addingTimeInterval(timeout)
+        var bytes = [UInt8](repeating: 0, count: 128)
+        var response = ""
+        while Date() < deadline {
+            let count = Darwin.read(fd, &bytes, bytes.count)
+            if count > 0 {
+                response += String(decoding: bytes[0..<Int(count)], as: UTF8.self)
+                if let newline = response.firstIndex(of: "\n") {
+                    let line = String(response[..<newline])
+                    recordResponseLocked(line)
+                    return line
+                }
+            } else if count < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR {
+                logger.error("Serial read failed")
+                closeLocked()
+                return nil
+            }
+            usleep(10_000)
+        }
+        return nil
+    }
+    private func recordResponseLocked(_ response: String) {
+        lastResponse = response
+        lastResponseKind = USBResponse(line: response)
+        if case .error = lastResponseKind { logger.error("Firmware rejected a command: \(response, privacy: .public)") }
     }
     private func closeLocked() { if fd >= 0 { Darwin.close(fd); fd = -1 }; deviceName = nil }
 }

@@ -92,11 +92,6 @@ void LedController::off() {
   matrixMode_ = false;
   render(0, 0, 0);
 }
-void LedController::test() {
-  diagnostic_ = true;
-  matrixMode_ = false;
-  render(255, 255, 255, 80);
-}
 
 void LedController::render(uint8_t r, uint8_t g, uint8_t b, uint8_t scale) {
   const uint16_t factor = uint16_t(brightnessPercent_) * scale / 100;

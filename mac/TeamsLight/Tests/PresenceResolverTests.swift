@@ -32,9 +32,63 @@ final class PresenceResolverTests: XCTestCase {
         )
         XCTAssertEqual(USBCommand.ping.wireValue, "PING")
         XCTAssertEqual(USBCommand.status.wireValue, "STATUS")
-        XCTAssertEqual(USBCommand.test.wireValue, "TEST")
+        XCTAssertEqual(USBCommand.info.wireValue, "INFO")
         XCTAssertEqual(USBCommand.fiveThree.wireValue, "FIVE_THREE")
         XCTAssertEqual(USBCommand.off.wireValue, "OFF")
+    }
+    func testUSBResponsesClassifyAcknowledgementsAndErrors() {
+        XCTAssertEqual(USBResponse(line: "PONG\n"), .pong)
+        XCTAssertEqual(USBResponse(line: "OK INFO TEAMSLIGHT_PROTOCOL 1 MATRIX_8X8"), .ok("OK INFO TEAMSLIGHT_PROTOCOL 1 MATRIX_8X8"))
+        XCTAssertEqual(USBResponse(line: "ERR BRIGHTNESS_RANGE"), .error("ERR BRIGHTNESS_RANGE"))
+        XCTAssertEqual(USBResponse(line: "unexpected"), .unknown("unexpected"))
+    }
+    func testAutomaticPresencePolicyUsesTeamsAttributionByDefault() {
+        XCTAssertEqual(LocalPresencePolicy(), LocalPresencePolicy(
+            useMicrophone: true,
+            useCamera: true,
+            useIdleTime: true,
+            requireTeamsForCallActivity: true
+        ))
+        var policy = LocalPresencePolicy()
+        XCTAssertEqual(policy.attributedActivityState(isActive: true, teamsRunning: false, state: .busy), .unknown)
+        XCTAssertEqual(policy.attributedActivityState(isActive: true, teamsRunning: true, state: .inCall), .inCall)
+        policy.requireTeamsForCallActivity = false
+        XCTAssertFalse(policy.requireTeamsForCallActivity)
+        XCTAssertEqual(policy.attributedActivityState(isActive: true, teamsRunning: false, state: .busy), .busy)
+    }
+    func testAutomaticTransitionsAreDebouncedButCanBeDisabled() {
+        let start = Date(timeIntervalSinceReferenceDate: 1_000)
+        var filter = PresenceTransitionFilter(initial: .available, delay: 10)
+        XCTAssertEqual(filter.resolve(.busy, now: start), .available)
+        XCTAssertEqual(filter.resolve(.available, now: start.addingTimeInterval(5)), .available)
+        XCTAssertEqual(filter.resolve(.busy, now: start.addingTimeInterval(6)), .available)
+        XCTAssertEqual(filter.resolve(.busy, now: start.addingTimeInterval(15)), .available)
+        XCTAssertEqual(filter.resolve(.busy, now: start.addingTimeInterval(16)), .busy)
+
+        filter.delay = 0
+        XCTAssertEqual(filter.resolve(.away, now: start.addingTimeInterval(17)), .away)
+    }
+    func testInactiveDisplayBehaviorMapsToExpectedPresence() {
+        XCTAssertNil(InactiveDisplayBehavior.retain.presenceState)
+        XCTAssertEqual(InactiveDisplayBehavior.away.presenceState, .away)
+        XCTAssertEqual(InactiveDisplayBehavior.off.presenceState, .offline)
+    }
+    @MainActor
+    func testMatrixPresetsRestoreFramesAndPersistOnlyPersonalPresets() {
+        let preset = MatrixPreset.builtIns.first { $0.name == "Checkmark" }
+        XCTAssertNotNil(preset)
+        XCTAssertEqual(preset?.matrix.hexPayload.count, 384)
+
+        let suiteName = "TeamsLightTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let matrix = LEDMatrix(fill: LEDColor(red: 1, green: 2, blue: 3))
+        let store = MatrixPresetStore(defaults: defaults)
+        store.save(name: " Desk focus ", matrix: matrix)
+        XCTAssertEqual(store.customPresets.map(\.name), ["Desk focus"])
+        XCTAssertEqual(store.customPresets.first?.matrix, matrix)
+        let restoredStore = MatrixPresetStore(defaults: defaults)
+        XCTAssertEqual(restoredStore.customPresets, store.customPresets)
     }
     func testLEDMatrixUsesLogicalRowMajorRGBPayload() {
         var matrix = LEDMatrix()
@@ -49,6 +103,8 @@ final class PresenceResolverTests: XCTestCase {
 
         matrix.fill(with: .black)
         XCTAssertEqual(Set(matrix.pixels), [.black])
+        XCTAssertEqual(LEDMatrix(hexPayload: "FF0080" + String(repeating: "000000", count: 62) + "010203")?[MatrixCoordinate(row: 0, column: 0)], LEDColor(red: 255, green: 0, blue: 128))
+        XCTAssertNil(LEDMatrix(hexPayload: "000000"))
     }
     func testLEDMatrixRectangularSelectionUpdatesEverySelectedPixel() {
         let start = MatrixCoordinate(row: 1, column: 2)

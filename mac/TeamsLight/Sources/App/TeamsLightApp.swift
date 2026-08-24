@@ -50,12 +50,37 @@ struct StatusHeader: View {
                         Text(destination.title).tag(destination)
                     }
                 }
-                Divider()
-                Button {
-                    controller.test()
-                } label: {
-                    Label("Test Lights", systemImage: "lightbulb")
+                Menu("Automatic Detection") {
+                    Toggle("Use Microphone", isOn: Binding(
+                        get: { controller.presencePolicy.useMicrophone },
+                        set: { enabled in controller.setPresencePolicy { $0.useMicrophone = enabled } }
+                    ))
+                    Toggle("Use Camera", isOn: Binding(
+                        get: { controller.presencePolicy.useCamera },
+                        set: { enabled in controller.setPresencePolicy { $0.useCamera = enabled } }
+                    ))
+                    Toggle("Use Idle Time", isOn: Binding(
+                        get: { controller.presencePolicy.useIdleTime },
+                        set: { enabled in controller.setPresencePolicy { $0.useIdleTime = enabled } }
+                    ))
+                    Divider()
+                    Toggle("Require Teams for Call Activity", isOn: Binding(
+                        get: { controller.presencePolicy.requireTeamsForCallActivity },
+                        set: { enabled in controller.setPresencePolicy { $0.requireTeamsForCallActivity = enabled } }
+                    ))
+                    Divider()
+                    Picker("Change Delay", selection: $controller.automaticTransitionDelay) {
+                        Text("No Delay").tag(0.0)
+                        Text("10 Seconds").tag(10.0)
+                        Text("30 Seconds").tag(30.0)
+                    }
                 }
+                Picker("When Locked or Asleep", selection: $controller.inactiveDisplayBehavior) {
+                    ForEach(InactiveDisplayBehavior.allCases) { behavior in
+                        Text(behavior.title).tag(behavior)
+                    }
+                }
+                Divider()
                 Button {
                     DiagnosticsWindowPresenter.shared.show(controller: controller)
                 } label: {
@@ -65,6 +90,12 @@ struct StatusHeader: View {
                     LEDMatrixWindowPresenter.shared.show(controller: controller)
                 } label: {
                     Label("LED Matrix Editor…", systemImage: "square.grid.3x3.fill")
+                }
+                .disabled(!controller.outputDestination.usesESP32)
+                Button {
+                    MatrixPresetWindowPresenter.shared.show(controller: controller)
+                } label: {
+                    Label("Matrix Presets…", systemImage: "square.grid.2x2")
                 }
                 .disabled(!controller.outputDestination.usesESP32)
                 Toggle(
@@ -105,16 +136,9 @@ struct PresenceOverrideSection: View {
             Text("Presence")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Grid(horizontalSpacing: 6, verticalSpacing: 6) {
-                GridRow {
-                    ForEach(PresenceChoice.all.prefix(3)) { choice in
-                        PresenceChoiceButton(choice: choice, controller: controller)
-                    }
-                }
-                GridRow {
-                    ForEach(PresenceChoice.all.suffix(3)) { choice in
-                        PresenceChoiceButton(choice: choice, controller: controller)
-                    }
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3), spacing: 6) {
+                ForEach(PresenceChoice.all) { choice in
+                    PresenceChoiceButton(choice: choice, controller: controller)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -148,6 +172,9 @@ struct PresenceChoice: Identifiable {
         PresenceChoice(id: "auto", title: "Auto", state: nil),
         PresenceChoice(id: "available", title: "Available", state: .available),
         PresenceChoice(id: "busy", title: "Busy", state: .busy),
+        PresenceChoice(id: "in-call", title: "In Call", state: .inCall),
+        PresenceChoice(id: "in-meeting", title: "Meeting", state: .inMeeting),
+        PresenceChoice(id: "presenting", title: "Presenting", state: .presenting),
         PresenceChoice(id: "dnd", title: "DND", state: .dnd),
         PresenceChoice(id: "away", title: "Away", state: .away),
         PresenceChoice(id: "offline", title: "Offline", state: .offline)
@@ -259,40 +286,120 @@ final class DiagnosticsWindowPresenter {
 
 @MainActor
 final class AppController: ObservableObject {
+    private enum DefaultsKey {
+        static let output = "outputDestination"
+        static let brightness = "brightnessPercent"
+        static let override = "presenceOverride"
+        static let customRed = "customColor.red"
+        static let customGreen = "customColor.green"
+        static let customBlue = "customColor.blue"
+        static let matrix = "matrix.hexPayload"
+        static let microphone = "presencePolicy.microphone"
+        static let camera = "presencePolicy.camera"
+        static let idle = "presencePolicy.idle"
+        static let requireTeams = "presencePolicy.requireTeams"
+        static let transitionDelay = "presenceTransitionDelay"
+        static let inactiveBehavior = "inactiveDisplayBehavior"
+    }
+    private let defaults = UserDefaults.standard
     @Published var state: PresenceState = .unknown
     @Published var signals: [PresenceSignal] = []
     @Published var connected = false
     @Published var deviceName: String?
     @Published var busylightDeviceName: String?
-    @Published var outputDestination: OutputDestination = .both { didSet { tick() } }
+    @Published var outputDestination: OutputDestination = .both { didSet { defaults.set(outputDestination.rawValue, forKey: DefaultsKey.output); tick() } }
     // Level 1 is the lowest visible ESP32 matrix brightness (level 0 turns it off).
     private static let lowestVisibleBrightnessPercent = 100.0 / 15.0
     @Published private(set) var isFiveThirdMode = false
-    @Published var brightnessPercent = 100.0
-    @Published var override: PresenceState?
+    @Published var brightnessPercent = 100.0 { didSet { defaults.set(brightnessPercent, forKey: DefaultsKey.brightness) } }
+    @Published var override: PresenceState? {
+        didSet {
+            if let override { defaults.set(override.rawValue, forKey: DefaultsKey.override) }
+            else { defaults.removeObject(forKey: DefaultsKey.override) }
+        }
+    }
     @Published var customColor = Color.purple
     @Published var isCustomColorOverride = false
     @Published private(set) var matrix = LEDMatrix()
     @Published private(set) var isMatrixOverride = false
     @Published var startAtLogin = false { didSet { setLoginItem() } }
+    @Published var presencePolicy = LocalPresencePolicy() { didSet { persistPresencePolicy(); tick() } }
+    @Published var automaticTransitionDelay = 10.0 {
+        didSet {
+            let normalized: Double = automaticTransitionDelay == 30 ? 30 : automaticTransitionDelay == 0 ? 0 : 10
+            if automaticTransitionDelay != normalized {
+                automaticTransitionDelay = normalized
+                return
+            }
+            transitionFilter.delay = automaticTransitionDelay
+            defaults.set(automaticTransitionDelay, forKey: DefaultsKey.transitionDelay)
+        }
+    }
+    @Published var inactiveDisplayBehavior: InactiveDisplayBehavior = .away {
+        didSet { defaults.set(inactiveDisplayBehavior.rawValue, forKey: DefaultsKey.inactiveBehavior); setInactiveDisplay(isInactiveDisplay) }
+    }
     private let transport = USBSerialTransport()
     private let busylight = KuandoBusylightTransport()
     private let sampler = LocalPresenceSampler(); private let resolver = PresenceResolver()
+    private var transitionFilter = PresenceTransitionFilter()
+    private var isInactiveDisplay = false
     private var timer: Timer?
     init() {
+        if let rawValue = defaults.string(forKey: DefaultsKey.output), let destination = OutputDestination(rawValue: rawValue) {
+            outputDestination = destination
+        }
+        if let brightness = defaults.object(forKey: DefaultsKey.brightness) as? Double {
+            brightnessPercent = min(100, max(0, brightness))
+        }
+        if let rawValue = defaults.string(forKey: DefaultsKey.override) {
+            override = PresenceState(rawValue: rawValue)
+        }
+        let red = defaults.object(forKey: DefaultsKey.customRed) as? Double ?? 0.5
+        let green = defaults.object(forKey: DefaultsKey.customGreen) as? Double ?? 0
+        let blue = defaults.object(forKey: DefaultsKey.customBlue) as? Double ?? 0.5
+        customColor = Color(red: red, green: green, blue: blue)
+        if let payload = defaults.string(forKey: DefaultsKey.matrix), let restoredMatrix = LEDMatrix(hexPayload: payload) {
+            matrix = restoredMatrix
+        }
+        presencePolicy = LocalPresencePolicy(
+            useMicrophone: defaults.object(forKey: DefaultsKey.microphone) as? Bool ?? true,
+            useCamera: defaults.object(forKey: DefaultsKey.camera) as? Bool ?? true,
+            useIdleTime: defaults.object(forKey: DefaultsKey.idle) as? Bool ?? true,
+            requireTeamsForCallActivity: defaults.object(forKey: DefaultsKey.requireTeams) as? Bool ?? true
+        )
+        if let delay = defaults.object(forKey: DefaultsKey.transitionDelay) as? Double, [0.0, 10.0, 30.0].contains(delay) {
+            automaticTransitionDelay = delay
+        }
+        if let rawValue = defaults.string(forKey: DefaultsKey.inactiveBehavior), let behavior = InactiveDisplayBehavior(rawValue: rawValue) {
+            inactiveDisplayBehavior = behavior
+        }
+        transitionFilter.delay = automaticTransitionDelay
         startAtLogin = SMAppService.mainApp.status == .enabled
         tick()
         timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
-        NotificationCenter.default.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.tick() }
-        }
+        NotificationCenter.default.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in Task { @MainActor in self?.setInactiveDisplay(true) } }
+        NotificationCenter.default.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in Task { @MainActor in self?.setInactiveDisplay(false) } }
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("com.apple.screenIsLocked"), object: nil, queue: .main) { [weak self] _ in Task { @MainActor in self?.setInactiveDisplay(true) } }
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("com.apple.screenIsUnlocked"), object: nil, queue: .main) { [weak self] _ in Task { @MainActor in self?.setInactiveDisplay(false) } }
     }
     func tick() {
-        signals = sampler.sample(); let next = override ?? resolver.resolve(signals)
+        signals = sampler.sample(policy: presencePolicy)
+        let resolved = resolver.resolve(signals)
+        let next: PresenceState
+        if let override {
+            transitionFilter.reset(to: override)
+            next = override
+        } else {
+            next = transitionFilter.resolve(resolved)
+        }
+        let displayState = isInactiveDisplay ? inactiveDisplayBehavior.presenceState ?? next : next
+        let retainsInactiveDisplay = isInactiveDisplay && inactiveDisplayBehavior == .retain
         let command: USBCommand
-        if isMatrixOverride {
+        if isInactiveDisplay {
+            command = .presence(displayState)
+        } else if isMatrixOverride {
             command = .matrix(matrix)
         } else if isFiveThirdMode {
             command = .fiveThree
@@ -303,19 +410,25 @@ final class AppController: ObservableObject {
         }
         let destination = outputDestination
         Task {
-            if destination.usesESP32 && !transport.isConnected { await transport.reconnect() }
-            if destination.usesBusylight && !busylight.isConnected { await busylight.reconnect() }
-            if destination.usesESP32 && transport.isConnected {
+            if !retainsInactiveDisplay && destination.usesESP32 && !transport.isConnected { await transport.reconnect() }
+            if !retainsInactiveDisplay && destination.usesBusylight && !busylight.isConnected { await busylight.reconnect() }
+            if !retainsInactiveDisplay && destination.usesESP32 && transport.isConnected {
                 // Ensure the special mark is rendered at its lowest visible brightness.
                 if isFiveThirdMode { await transport.send(USBCommand.brightness(1).wireValue) }
                 await transport.send(command.wireValue)
             }
-            if destination.usesBusylight && busylight.isConnected {
-                if isCustomColorOverride {
+            if !retainsInactiveDisplay && destination.usesBusylight && busylight.isConnected {
+                if isInactiveDisplay {
+                    await busylight.send(displayState, brightnessPercent: brightnessPercent)
+                } else if isMatrixOverride || isFiveThirdMode {
+                    // Matrix-specific displays have no Busylight equivalent;
+                    // keep the secondary device dark rather than showing stale presence.
+                    await busylight.send(.offline, brightnessPercent: brightnessPercent)
+                } else if isCustomColorOverride {
                     let color = customColorComponents
                     await busylight.send(red: color.red, green: color.green, blue: color.blue, brightnessPercent: brightnessPercent)
                 } else {
-                    await busylight.send(next, brightnessPercent: brightnessPercent)
+                    await busylight.send(displayState, brightnessPercent: brightnessPercent)
                 }
             }
             connected = (destination.usesESP32 && transport.isConnected) || (destination.usesBusylight && busylight.isConnected)
@@ -329,6 +442,10 @@ final class AppController: ObservableObject {
         isMatrixOverride = false
         isCustomColorOverride = false
         override = state
+        tick()
+    }
+    private func setInactiveDisplay(_ inactive: Bool) {
+        isInactiveDisplay = inactive
         tick()
     }
     func setFiveThirdMode(_ enabled: Bool) {
@@ -348,6 +465,7 @@ final class AppController: ObservableObject {
     }
     func setCustomColor(_ color: Color) {
         customColor = color
+        persistCustomColor()
         isFiveThirdMode = false
         isMatrixOverride = false
         isCustomColorOverride = true
@@ -358,6 +476,14 @@ final class AppController: ObservableObject {
         }
     }
     func activateMatrixEditor() {
+        isFiveThirdMode = false
+        isCustomColorOverride = false
+        isMatrixOverride = true
+        tick()
+    }
+    func applyMatrixPreset(_ preset: MatrixPreset) {
+        matrix = preset.matrix
+        defaults.set(matrix.hexPayload, forKey: DefaultsKey.matrix)
         isFiveThirdMode = false
         isCustomColorOverride = false
         isMatrixOverride = true
@@ -387,6 +513,7 @@ final class AppController: ObservableObject {
         updatedMatrix.setColor(ledColor, at: coordinates)
         let wasMatrixOverride = isMatrixOverride
         matrix = updatedMatrix
+        defaults.set(updatedMatrix.hexPayload, forKey: DefaultsKey.matrix)
         isFiveThirdMode = false
         isCustomColorOverride = false
         isMatrixOverride = true
@@ -404,6 +531,7 @@ final class AppController: ObservableObject {
     }
     func clearMatrix() {
         matrix = LEDMatrix()
+        defaults.set(matrix.hexPayload, forKey: DefaultsKey.matrix)
         activateMatrixEditor()
     }
     func setBrightness() {
@@ -415,7 +543,7 @@ final class AppController: ObservableObject {
                 let color = customColorComponents
                 await busylight.send(red: color.red, green: color.green, blue: color.blue, brightnessPercent: brightnessPercent)
             } else {
-                await busylight.send(override ?? resolver.resolve(signals), brightnessPercent: brightnessPercent)
+                await busylight.send(isInactiveDisplay ? inactiveDisplayBehavior.presenceState ?? state : state, brightnessPercent: brightnessPercent)
             }
         }
     }
@@ -423,16 +551,11 @@ final class AppController: ObservableObject {
         brightnessPercent = min(100, max(0, brightnessPercent + amount))
         setBrightness()
     }
-    func test() { Task {
-        if outputDestination.usesESP32 { await transport.send(USBCommand.test.wireValue) }
-        if outputDestination.usesBusylight {
-            for color in [(UInt8(255), UInt8(0), UInt8(0)), (0, 255, 0), (0, 0, 255)] {
-                await busylight.send(red: color.0, green: color.1, blue: color.2, brightnessPercent: brightnessPercent)
-                try? await Task.sleep(for: .milliseconds(350))
-            }
-            tick()
-        }
-    } }
+    func setPresencePolicy(_ update: (inout LocalPresencePolicy) -> Void) {
+        var updated = presencePolicy
+        update(&updated)
+        presencePolicy = updated
+    }
     private func setLoginItem() {
         do {
             if startAtLogin {
@@ -440,6 +563,18 @@ final class AppController: ObservableObject {
                     try SMAppService.mainApp.unregister()
                 }
         } catch { Logger(subsystem: "com.example.TeamsLight", category: "app").error("Login item update failed") } }
+    private func persistCustomColor() {
+        let color = customColorComponents
+        defaults.set(Double(color.red) / 255, forKey: DefaultsKey.customRed)
+        defaults.set(Double(color.green) / 255, forKey: DefaultsKey.customGreen)
+        defaults.set(Double(color.blue) / 255, forKey: DefaultsKey.customBlue)
+    }
+    private func persistPresencePolicy() {
+        defaults.set(presencePolicy.useMicrophone, forKey: DefaultsKey.microphone)
+        defaults.set(presencePolicy.useCamera, forKey: DefaultsKey.camera)
+        defaults.set(presencePolicy.useIdleTime, forKey: DefaultsKey.idle)
+        defaults.set(presencePolicy.requireTeamsForCallActivity, forKey: DefaultsKey.requireTeams)
+    }
     
     var displayTitle: String {
         if isMatrixOverride { return "Custom Matrix" }
@@ -498,6 +633,7 @@ struct DiagnosticsView: View {
             LabeledContent("ESP32 USB", value: controller.deviceName ?? "not connected");
             LabeledContent("Kuando Busylight", value: controller.busylightDeviceName ?? "not connected");
             LabeledContent("Serial response", value: controller.transportLastResponse);
+            LabeledContent("Protocol response", value: controller.transportResponseStatus);
             Section("Raw provider states") {
                 ForEach(controller.signals, id: \.provider) { signal in
                     LabeledContent(signal.provider, value: "\(signal.state.title): \(signal.detail)")
@@ -507,7 +643,17 @@ struct DiagnosticsView: View {
         .padding().frame(minWidth: 500) }
 }
 
-private extension AppController { var transportLastResponse: String { transport.lastResponse } }
+private extension AppController {
+    var transportLastResponse: String { transport.lastResponse }
+    var transportResponseStatus: String {
+        switch transport.lastResponseKind {
+        case .pong: "Connected"
+        case .ok: "Acknowledged"
+        case .error: "Firmware error"
+        case .unknown: "Waiting for response"
+        }
+    }
+}
 
 private extension PresenceState {
     var accentColor: Color {

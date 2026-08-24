@@ -47,6 +47,10 @@ void test_malformed_matrix_payload_is_rejected() {
   TEST_ASSERT_FALSE(parseMatrixPayload("000000FF108000", colors, 2));
 }
 
+void test_protocol_maximum_command_holds_a_complete_matrix() {
+  TEST_ASSERT_EQUAL_UINT32(391, kSerialProtocolMaxCommandLength);
+}
+
 void setup() {
   // Keep native USB CDC configured long enough for PlatformIO to reopen the
   // port after flashing before Unity begins sending its one-shot output.
@@ -59,6 +63,7 @@ void setup() {
   RUN_TEST(test_unknown_state_rejected_without_mutating_output);
   RUN_TEST(test_matrix_payload_parses_rgb_pixels);
   RUN_TEST(test_malformed_matrix_payload_is_rejected);
+  RUN_TEST(test_protocol_maximum_command_holds_a_complete_matrix);
   UNITY_END();
 }
 void loop() {}

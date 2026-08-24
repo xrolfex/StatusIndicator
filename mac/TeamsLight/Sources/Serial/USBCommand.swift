@@ -6,7 +6,7 @@ enum USBCommand: Equatable, Sendable {
     case color(UInt8, UInt8, UInt8)
     case matrix(LEDMatrix)
     case pixel(MatrixCoordinate, LEDColor)
-    case ping, status, test, fiveThree, off
+    case ping, status, info, fiveThree, off
     
     var wireValue: String {
         switch self {
@@ -16,7 +16,22 @@ enum USBCommand: Equatable, Sendable {
         case .matrix(let matrix): return "MATRIX \(matrix.hexPayload)"
         case .pixel(let coordinate, let color):
             return "PIXEL \(coordinate.row) \(coordinate.column) \(color.red) \(color.green) \(color.blue)"
-        case .ping: return "PING"; case .status: return "STATUS"; case .test: return "TEST"; case .fiveThree: return "FIVE_THREE"; case .off: return "OFF"
+        case .ping: return "PING"; case .status: return "STATUS"; case .info: return "INFO"; case .fiveThree: return "FIVE_THREE"; case .off: return "OFF"
         }
+    }
+}
+
+enum USBResponse: Equatable, Sendable {
+    case pong
+    case ok(String)
+    case error(String)
+    case unknown(String)
+
+    init(line: String) {
+        let normalized = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalized == "PONG" { self = .pong }
+        else if normalized.hasPrefix("OK") { self = .ok(normalized) }
+        else if normalized.hasPrefix("ERR") { self = .error(normalized) }
+        else { self = .unknown(normalized) }
     }
 }

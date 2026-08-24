@@ -38,7 +38,9 @@ Join the ESP32 and matrix grounds. Do not power the matrix from the ESP32 3.3 V 
 
 Most WS2812B-64 panels use GRB pixels in a serpentine row layout. If the `FIVE_THREE` pattern is mirrored or rotated on a particular panel, adjust `MATRIX_SERPENTINE` and `MATRIX_ROTATION` in the WROOM environment. Solid presence colors are unaffected by matrix orientation.
 
-The firmware never includes or initializes Wi-Fi or Bluetooth. It caps brightness at 15%. `COLOR` and `TEST` are diagnostic modes; send a presence state to return to normal rendering.
+The firmware never includes or initializes Wi-Fi or Bluetooth. It caps brightness at 15%. `COLOR` is a diagnostic mode; send a presence state to return to normal rendering.
+
+Send `INFO` over the serial connection to return `OK INFO TEAMSLIGHT_PROTOCOL 1 MATRIX_8X8`. This small capability handshake lets host software identify a compatible firmware build without relying on a USB port name.
 
 Custom matrices use logical, zero-based coordinates. `PIXEL ROW COLUMN R G B` updates one NeoPixel, while `MATRIX` accepts exactly 64 contiguous `RRGGBB` values in row-major order. Both commands apply the target's configured rotation and serpentine layout and remain active until a presence-state command is received.
 

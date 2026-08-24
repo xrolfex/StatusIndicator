@@ -38,6 +38,28 @@ enum PresenceState: String, CaseIterable, Sendable {
     static let resolutionOrder: [PresenceState] = [.presenting, .inCall, .inMeeting, .dnd, .busy, .away, .available, .offline, .unknown]
 }
 
+enum InactiveDisplayBehavior: String, CaseIterable, Identifiable, Sendable {
+    case retain
+    case away
+    case off
+
+    var id: Self { self }
+    var title: String {
+        switch self {
+        case .retain: "Keep Current Light"
+        case .away: "Show Away"
+        case .off: "Turn Off"
+        }
+    }
+    var presenceState: PresenceState? {
+        switch self {
+        case .retain: nil
+        case .away: .away
+        case .off: .offline
+        }
+    }
+}
+
 struct PresenceSignal: Sendable, Equatable {
     let provider: String
     let state: PresenceState
