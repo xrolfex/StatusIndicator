@@ -150,6 +150,42 @@ final class PresenceResolverTests: XCTestCase {
         fill.fill(with: LEDColor(red: 10, green: 20, blue: 30))
         XCTAssertEqual(fill.pixels.count, 128)
     }
+    func testMatrixCapabilitiesRejectInvalidGeometryAndDefaultOptionalFields() {
+        XCTAssertEqual(
+            MatrixCapabilities.parse("OK INFO TEAMSLIGHT_PROTOCOL 4 MATRIX WIDTH 8 HEIGHT 8 PIXELS 64"),
+            MatrixCapabilities(geometry: .legacy, rotation: 0, serpentine: false)
+        )
+        XCTAssertNil(MatrixCapabilities.parse("OK INFO MATRIX WIDTH 0 HEIGHT 8 PIXELS 0"))
+        XCTAssertNil(MatrixCapabilities.parse("OK INFO MATRIX WIDTH 8 HEIGHT 8 PIXELS 63"))
+        XCTAssertNil(MatrixCapabilities.parse("OK INFO MATRIX WIDTH eight HEIGHT 8 PIXELS 64"))
+    }
+    func testFirmwareHealthParsingRequiresEveryValue() {
+        XCTAssertEqual(
+            FirmwareHealth.parse("OK INFO UPTIME 120 HEAP 204800 RESET 3"),
+            FirmwareHealth(uptimeSeconds: 120, freeHeapBytes: 204800, resetReason: 3)
+        )
+        XCTAssertNil(FirmwareHealth.parse("OK INFO UPTIME 120 HEAP 204800"))
+        XCTAssertNil(FirmwareHealth.parse("OK INFO UPTIME none HEAP 204800 RESET 3"))
+    }
+    @MainActor
+    func testPresetImportIgnoresInvalidBuiltInAndDuplicateArtwork() throws {
+        let suiteName = "TeamsLightTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = MatrixPresetStore(defaults: defaults)
+        let matrix = LEDMatrix(fill: LEDColor(red: 1, green: 2, blue: 3))
+        store.save(name: "Original", matrix: matrix)
+        let imported = [
+            MatrixPreset(name: "Duplicate", matrix: matrix),
+            MatrixPreset(name: "Allowed", matrix: LEDMatrix(fill: LEDColor(red: 3, green: 2, blue: 1))),
+            MatrixPreset(name: "Pretend built-in", matrix: matrix, isBuiltIn: true)
+        ]
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("TeamsLightTests-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try JSONEncoder().encode(imported).write(to: url)
+        XCTAssertEqual(store.importPresets(from: url), 1)
+        XCTAssertEqual(store.customPresets.map(\.name), ["Original", "Allowed"])
+    }
     func testScenesProduceFramesForEveryAnimation() {
         let geometry = MatrixGeometry(width: 10, height: 5)
         for animation in MatrixAnimation.allCases {

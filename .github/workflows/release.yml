@@ -1,0 +1,66 @@
+name: Release macOS app
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing v* tag to publish
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+    environment: release
+    defaults:
+      run:
+        working-directory: mac/TeamsLight
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Import Developer ID certificate
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+        run: |
+          keychain_path="$RUNNER_TEMP/build.keychain-db"
+          certificate_path="$RUNNER_TEMP/developer-id.p12"
+          echo "$CERTIFICATE_BASE64" | base64 -D > "$certificate_path"
+          security create-keychain -p "$CERTIFICATE_PASSWORD" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$CERTIFICATE_PASSWORD" "$keychain_path"
+          security import "$certificate_path" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain_path"
+          security list-keychain -d user -s "$keychain_path"
+
+      - name: Build and sign application
+        env:
+          TEAMSLIGHT_SIGNING_IDENTITY: ${{ vars.DEVELOPER_ID_APPLICATION_IDENTITY }}
+        run: scripts/package-app.sh
+
+      - name: Notarize and staple application
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+        run: |
+          key_path="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
+          printf '%s' "$APPLE_API_PRIVATE_KEY" > "$key_path"
+          ditto -c -k --keepParent .build/TeamsLight.app .build/TeamsLight.zip
+          xcrun notarytool submit .build/TeamsLight.zip --key "$key_path" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID" --wait
+          xcrun stapler staple .build/TeamsLight.app
+          codesign --verify --deep --strict --verbose=2 .build/TeamsLight.app
+          spctl --assess --type execute --verbose=4 .build/TeamsLight.app
+          rm .build/TeamsLight.zip
+          ditto -c -k --keepParent .build/TeamsLight.app .build/TeamsLight-macOS.zip
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          files: mac/TeamsLight/.build/TeamsLight-macOS.zip

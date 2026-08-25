@@ -7,6 +7,9 @@ The project contains two pieces:
 - `firmware/` — shared PlatformIO/Arduino firmware for the Waveshare ESP32-S3-Matrix and ESP32-WROOM-32D with an external 8×8 WS2812B matrix.
 - `mac/TeamsLight/` — a native macOS 13+ SwiftUI menu-bar app, with an Xcode project and tests. It controls the ESP32 over serial and Busylights over HID, without a vendor SDK or driver.
 
+For a step-by-step wiring and first-run verification guide, see
+[Hardware setup and first-run check](docs/HARDWARE_SETUP.md).
+
 Neither component uses Wi-Fi or Bluetooth. The ESP32 starts with its LEDs off and only changes when commanded by the Mac app.
 
 ## What it shows
@@ -137,6 +140,13 @@ swift test
 ```
 
 For distribution, archive the Xcode app, sign it with your Developer ID certificate, and notarize it according to your organization’s release process. The app requests no elevated privileges.
+
+GitHub Actions compiles both firmware targets and builds/tests the macOS app on
+every pull request and `main` push. Pushing a `v*` tag starts the protected
+release workflow, which signs, notarizes, staples, and attaches the macOS app
+to a GitHub Release. Before using it, configure the `release` environment with
+the required signing secrets and the `DEVELOPER_ID_APPLICATION_IDENTITY`
+repository variable; see [release automation setup](docs/RELEASE_AUTOMATION.md).
 
 ## Sources
 

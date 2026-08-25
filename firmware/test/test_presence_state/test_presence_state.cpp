@@ -47,6 +47,19 @@ void test_malformed_matrix_payload_is_rejected() {
   TEST_ASSERT_FALSE(parseMatrixPayload("000000FF108000", colors, 2));
 }
 
+void test_matrix_payload_rejects_null_arguments() {
+  uint8_t colors[3]{};
+  TEST_ASSERT_FALSE(parseMatrixPayload(nullptr, colors, 1));
+  TEST_ASSERT_FALSE(parseMatrixPayload("000000", nullptr, 1));
+}
+
+void test_matrix_payload_accepts_case_insensitive_hex() {
+  uint8_t colors[3]{};
+  TEST_ASSERT_TRUE(parseMatrixPayload("aBcD0f", colors, 1));
+  const uint8_t expected[] = {171, 205, 15};
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, colors, 3);
+}
+
 void test_protocol_maximum_command_holds_a_complete_matrix() {
   TEST_ASSERT_EQUAL_UINT32(391, kSerialProtocolMaxCommandLength);
 }
@@ -63,6 +76,8 @@ void setup() {
   RUN_TEST(test_unknown_state_rejected_without_mutating_output);
   RUN_TEST(test_matrix_payload_parses_rgb_pixels);
   RUN_TEST(test_malformed_matrix_payload_is_rejected);
+  RUN_TEST(test_matrix_payload_rejects_null_arguments);
+  RUN_TEST(test_matrix_payload_accepts_case_insensitive_hex);
   RUN_TEST(test_protocol_maximum_command_holds_a_complete_matrix);
   UNITY_END();
 }

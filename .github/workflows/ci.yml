@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  macos-app:
+    name: macOS app
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: mac/TeamsLight
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Swift tests
+        run: swift test
+      - name: Build release package
+        run: swift build -c release
+
+  firmware:
+    name: Firmware (${{ matrix.environment }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [waveshare_esp32_s3_matrix, esp32_wroom_32d_ws2812b_64]
+    defaults:
+      run:
+        working-directory: firmware
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install PlatformIO
+        run: pip install platformio
+      - name: Compile firmware
+        run: pio run -e ${{ matrix.environment }}
+      - name: Explain hardware tests
+        run: echo 'Parser tests require a flashed, connected board and are run outside hosted CI.'
