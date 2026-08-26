@@ -45,3 +45,43 @@ struct PresenceTransitionFilter: Sendable {
         candidateSince = nil
     }
 }
+
+struct TeamsMicrophoneActivityClassifier: Sendable {
+    // Teams chat chimes briefly run an input-capable CoreAudio device. Holding
+    // call state avoids rendering that short pulse as an actual call.
+    static let callConfirmationInterval: TimeInterval = 2
+
+    private var activityStartedAt: Date?
+    private var lastNotificationAt: Date?
+
+    mutating func classify(
+        _ signals: [PresenceSignal],
+        now: Date = .now
+    ) -> (presenceSignals: [PresenceSignal], detectedNotification: Bool) {
+        let isActive = signals.contains {
+            $0.provider == LocalPresenceSampler.teamsMicrophoneProvider && $0.state == .inCall
+        }
+
+        if isActive {
+            if activityStartedAt == nil { activityStartedAt = now }
+            guard let activityStartedAt,
+                  now.timeIntervalSince(activityStartedAt) < Self.callConfirmationInterval else {
+                return (signals, false)
+            }
+            return (
+                signals.filter { $0.provider != LocalPresenceSampler.teamsMicrophoneProvider },
+                false
+            )
+        }
+
+        guard let activityStartedAt else { return (signals, false) }
+        self.activityStartedAt = nil
+        let wasBrief = now.timeIntervalSince(activityStartedAt) < Self.callConfirmationInterval
+        let isOutsideCooldown = lastNotificationAt.map {
+            now.timeIntervalSince($0) >= Self.callConfirmationInterval
+        } ?? true
+        let detectedNotification = wasBrief && isOutsideCooldown
+        if detectedNotification { lastNotificationAt = now }
+        return (signals, detectedNotification)
+    }
+}

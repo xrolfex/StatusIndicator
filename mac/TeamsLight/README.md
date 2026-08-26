@@ -26,7 +26,7 @@ The Settings window includes **State Appearance** profiles. Each state can use i
 
 **Import Image** converts a selected local image to the matrix's 8×8 RGB frame and shows it immediately. Choose **Fit** to preserve the full image with black letterboxing, or **Crop to Fill** to use the entire matrix. Save the result as a personal preset if you want to reuse it.
 
-Incoming Desk Display notifications briefly blink white on the active ESP32 and Busylight outputs. Turn off **Flash white for notifications** under **Behavior** to keep the current display unchanged when notifications arrive.
+Brief Teams chat-alert audio activity blinks white on the active ESP32 and Busylight outputs. Input activity must remain active for two seconds before it is treated as a call, preventing a chat chime from briefly showing red. Turn off **Flash white for notifications** under **Behavior** to keep the current display unchanged for these alerts.
 
 **Desk Display** is the animation and automation workspace. It includes pulse, rainbow, scanner, sparkle, countdown, scrolling-text, audio-meter, and screen-ambient scenes; custom scenes are local and reusable. Import an animated GIF to convert up to 120 frames to the current matrix geometry. Rules can show scenes automatically for presence, active microphone, or a calendar event beginning within ten minutes. Calendar access is off by default and is only requested after enabling it in Settings; audio access is also opt-in and processed locally without recording.
 

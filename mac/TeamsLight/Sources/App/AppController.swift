@@ -96,6 +96,7 @@ final class AppController: ObservableObject {
     private let calendarMonitor = CalendarMonitor()
     private let audioMeter = AudioMeter()
     private var transitionFilter = PresenceTransitionFilter()
+    private var teamsMicrophoneActivityClassifier = TeamsMicrophoneActivityClassifier()
     private var isInactiveDisplay = false
     private var overrideExpiryTask: Task<Void, Never>?
     private var matrixUndoStack: [LEDMatrix] = []
@@ -163,8 +164,16 @@ final class AppController: ObservableObject {
     func tick() {
         availableESP32Paths = USBSerialTransport.candidatePaths()
         signals = sampler.sample(policy: presencePolicy)
+        let classifiedActivity = teamsMicrophoneActivityClassifier.classify(signals)
+        if classifiedActivity.detectedNotification, notificationFlashesEnabled {
+            notifications.append(DeskNotification(
+                title: "Teams notification",
+                scene: .notificationFlash,
+                expiresAt: .now.addingTimeInterval(3)
+            ))
+        }
         if calendarIntegrationEnabled { calendarMonitor.refreshIfNeeded() }
-        let resolved = resolver.resolve(signals)
+        let resolved = resolver.resolve(classifiedActivity.presenceSignals)
         let next: PresenceState
         if let override {
             transitionFilter.reset(to: override)
@@ -278,7 +287,12 @@ final class AppController: ObservableObject {
                 calibrationSerpentine = capabilities.serpentine
             }
         }
-        if next != state { Logger(subsystem: "com.example.TeamsLight", category: "presence").info("Presence changed \(self.state.rawValue) -> \(next.rawValue)"); state = next }
+        if next != state {
+            Logger(subsystem: "com.example.TeamsLight", category: "presence").info(
+                "Presence changed \(self.state.rawValue, privacy: .public) -> \(next.rawValue, privacy: .public)"
+            )
+            state = next
+        }
     }
     func setPresenceOverride(_ state: PresenceState?) {
         isFiveThirdMode = false

@@ -69,6 +69,43 @@ final class PresenceResolverTests: XCTestCase {
         filter.delay = 0
         XCTAssertEqual(filter.resolve(.away, now: start.addingTimeInterval(17)), .away)
     }
+    func testBriefTeamsMicrophoneActivityBecomesNotificationWithoutCallState() {
+        let start = Date(timeIntervalSinceReferenceDate: 1_000)
+        let teams = signal(.available)
+        let microphone = PresenceSignal(
+            provider: LocalPresenceSampler.teamsMicrophoneProvider,
+            state: .inCall,
+            detail: "inferred from active input"
+        )
+        var classifier = TeamsMicrophoneActivityClassifier()
+
+        let started = classifier.classify([teams, microphone], now: start)
+        XCTAssertEqual(started.presenceSignals, [teams])
+        XCTAssertFalse(started.detectedNotification)
+
+        let ended = classifier.classify([teams], now: start.addingTimeInterval(1.2))
+        XCTAssertEqual(ended.presenceSignals, [teams])
+        XCTAssertTrue(ended.detectedNotification)
+    }
+    func testSustainedTeamsMicrophoneActivityBecomesCallWithoutNotification() {
+        let start = Date(timeIntervalSinceReferenceDate: 2_000)
+        let teams = signal(.available)
+        let microphone = PresenceSignal(
+            provider: LocalPresenceSampler.teamsMicrophoneProvider,
+            state: .inCall,
+            detail: "inferred from active input"
+        )
+        var classifier = TeamsMicrophoneActivityClassifier()
+
+        XCTAssertEqual(classifier.classify([teams, microphone], now: start).presenceSignals, [teams])
+        let confirmed = classifier.classify(
+            [teams, microphone],
+            now: start.addingTimeInterval(TeamsMicrophoneActivityClassifier.callConfirmationInterval)
+        )
+        XCTAssertEqual(confirmed.presenceSignals, [teams, microphone])
+        XCTAssertFalse(confirmed.detectedNotification)
+        XCTAssertFalse(classifier.classify([teams], now: start.addingTimeInterval(3)).detectedNotification)
+    }
     func testInactiveDisplayBehaviorMapsToExpectedPresence() {
         XCTAssertNil(InactiveDisplayBehavior.retain.presenceState)
         XCTAssertEqual(InactiveDisplayBehavior.away.presenceState, .away)

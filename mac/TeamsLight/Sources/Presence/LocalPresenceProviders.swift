@@ -115,6 +115,8 @@ struct LocalPresencePolicy: Codable, Sendable, Equatable {
 
 /// Combines public local signals. Teams + active mic is intentionally an inference, not app-level microphone attribution.
 struct LocalPresenceSampler: Sendable {
+    static let teamsMicrophoneProvider = "Teams + microphone"
+
     private let teams = TeamsProcessPresenceProvider()
     private let microphone = MicrophonePresenceProvider()
     private let camera = CameraPresenceProvider()
@@ -141,7 +143,7 @@ struct LocalPresenceSampler: Sendable {
                 state: teamsRunning ? .inCall : .busy
             )
             if micState == .inCall {
-                result.append(PresenceSignal(provider: "Teams + microphone", state: micState, detail: "inferred from active input"))
+                result.append(PresenceSignal(provider: Self.teamsMicrophoneProvider, state: micState, detail: "inferred from active input"))
             } else if micState == .busy {
                 result.append(PresenceSignal(provider: "Microphone activity", state: micState, detail: "input device active"))
             } else {
