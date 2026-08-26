@@ -77,7 +77,7 @@ final class PresenceResolverTests: XCTestCase {
             state: .inCall,
             detail: "inferred from active input"
         )
-        var classifier = TeamsMicrophoneActivityClassifier()
+        var classifier = NotificationAudioClassifier()
 
         let started = classifier.classify([teams, microphone], now: start)
         XCTAssertEqual(started.presenceSignals, [teams])
@@ -95,16 +95,65 @@ final class PresenceResolverTests: XCTestCase {
             state: .inCall,
             detail: "inferred from active input"
         )
-        var classifier = TeamsMicrophoneActivityClassifier()
+        var classifier = NotificationAudioClassifier()
 
         XCTAssertEqual(classifier.classify([teams, microphone], now: start).presenceSignals, [teams])
         let confirmed = classifier.classify(
             [teams, microphone],
-            now: start.addingTimeInterval(TeamsMicrophoneActivityClassifier.callConfirmationInterval)
+            now: start.addingTimeInterval(NotificationAudioClassifier.maximumNotificationDuration)
         )
         XCTAssertEqual(confirmed.presenceSignals, [teams, microphone])
         XCTAssertFalse(confirmed.detectedNotification)
         XCTAssertFalse(classifier.classify([teams], now: start.addingTimeInterval(3)).detectedNotification)
+    }
+    func testProcessAudioSeparatesMicrophoneCaptureFromMusicAndNotificationSounds() {
+        let summary = AudioProcessActivitySummary(activities: [
+            AudioProcessActivity(
+                bundleIdentifier: "com.apple.Music",
+                isRunningInput: false,
+                isRunningOutput: true
+            ),
+            AudioProcessActivity(
+                bundleIdentifier: "systemsoundserverd",
+                isRunningInput: false,
+                isRunningOutput: true
+            ),
+            AudioProcessActivity(
+                bundleIdentifier: "com.microsoft.teams2.helper",
+                isRunningInput: true,
+                isRunningOutput: false
+            )
+        ])
+
+        XCTAssertTrue(summary.teamsInputActive)
+        XCTAssertTrue(summary.anyInputActive)
+        XCTAssertTrue(summary.notificationOutputActive)
+        XCTAssertTrue(TeamsProcessPresenceProvider.matches(bundleIdentifier: "com.microsoft.teams"))
+        XCTAssertTrue(TeamsProcessPresenceProvider.matches(bundleIdentifier: "com.microsoft.teams2.helper"))
+        XCTAssertFalse(TeamsProcessPresenceProvider.matches(bundleIdentifier: "com.apple.Music"))
+    }
+    func testBriefProcessAttributedNotificationAudioDoesNotFilterPresence() {
+        let start = Date(timeIntervalSinceReferenceDate: 3_000)
+        let available = signal(.available)
+        let active = PresenceSignal(
+            provider: LocalPresenceSampler.notificationAudioProvider,
+            state: .unknown,
+            detail: LocalPresenceSampler.notificationAudioActiveDetail
+        )
+        let inactive = PresenceSignal(
+            provider: LocalPresenceSampler.notificationAudioProvider,
+            state: .unknown,
+            detail: LocalPresenceSampler.notificationAudioInactiveDetail
+        )
+        var classifier = NotificationAudioClassifier()
+
+        let started = classifier.classify([available, active], now: start)
+        XCTAssertEqual(started.presenceSignals, [available, active])
+        XCTAssertFalse(started.detectedNotification)
+
+        let ended = classifier.classify([available, inactive], now: start.addingTimeInterval(1.2))
+        XCTAssertEqual(ended.presenceSignals, [available, inactive])
+        XCTAssertTrue(ended.detectedNotification)
     }
     func testInactiveDisplayBehaviorMapsToExpectedPresence() {
         XCTAssertNil(InactiveDisplayBehavior.retain.presenceState)

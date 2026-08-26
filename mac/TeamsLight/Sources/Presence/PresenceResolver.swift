@@ -46,10 +46,10 @@ struct PresenceTransitionFilter: Sendable {
     }
 }
 
-struct TeamsMicrophoneActivityClassifier: Sendable {
-    // Teams chat chimes briefly run an input-capable CoreAudio device. Holding
-    // call state avoids rendering that short pulse as an actual call.
-    static let callConfirmationInterval: TimeInterval = 2
+struct NotificationAudioClassifier: Sendable {
+    // Notification sounds are short. On older macOS releases without process
+    // attribution, the same window also prevents playback from flashing red.
+    static let maximumNotificationDuration: TimeInterval = 2
 
     private var activityStartedAt: Date?
     private var lastNotificationAt: Date?
@@ -58,16 +58,23 @@ struct TeamsMicrophoneActivityClassifier: Sendable {
         _ signals: [PresenceSignal],
         now: Date = .now
     ) -> (presenceSignals: [PresenceSignal], detectedNotification: Bool) {
-        let isActive = signals.contains {
+        let notificationAudio = signals.first {
+            $0.provider == LocalPresenceSampler.notificationAudioProvider
+        }
+        let hasProcessAttribution = notificationAudio != nil
+        let isActive = notificationAudio.map {
+            $0.detail == LocalPresenceSampler.notificationAudioActiveDetail
+        } ?? signals.contains {
             $0.provider == LocalPresenceSampler.teamsMicrophoneProvider && $0.state == .inCall
         }
 
         if isActive {
             if activityStartedAt == nil { activityStartedAt = now }
             guard let activityStartedAt,
-                  now.timeIntervalSince(activityStartedAt) < Self.callConfirmationInterval else {
+                  now.timeIntervalSince(activityStartedAt) < Self.maximumNotificationDuration else {
                 return (signals, false)
             }
+            if hasProcessAttribution { return (signals, false) }
             return (
                 signals.filter { $0.provider != LocalPresenceSampler.teamsMicrophoneProvider },
                 false
@@ -76,9 +83,9 @@ struct TeamsMicrophoneActivityClassifier: Sendable {
 
         guard let activityStartedAt else { return (signals, false) }
         self.activityStartedAt = nil
-        let wasBrief = now.timeIntervalSince(activityStartedAt) < Self.callConfirmationInterval
+        let wasBrief = now.timeIntervalSince(activityStartedAt) < Self.maximumNotificationDuration
         let isOutsideCooldown = lastNotificationAt.map {
-            now.timeIntervalSince($0) >= Self.callConfirmationInterval
+            now.timeIntervalSince($0) >= Self.maximumNotificationDuration
         } ?? true
         let detectedNotification = wasBrief && isOutsideCooldown
         if detectedNotification { lastNotificationAt = now }

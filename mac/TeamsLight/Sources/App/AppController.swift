@@ -96,7 +96,7 @@ final class AppController: ObservableObject {
     private let calendarMonitor = CalendarMonitor()
     private let audioMeter = AudioMeter()
     private var transitionFilter = PresenceTransitionFilter()
-    private var teamsMicrophoneActivityClassifier = TeamsMicrophoneActivityClassifier()
+    private var notificationAudioClassifier = NotificationAudioClassifier()
     private var isInactiveDisplay = false
     private var overrideExpiryTask: Task<Void, Never>?
     private var matrixUndoStack: [LEDMatrix] = []
@@ -164,7 +164,7 @@ final class AppController: ObservableObject {
     func tick() {
         availableESP32Paths = USBSerialTransport.candidatePaths()
         signals = sampler.sample(policy: presencePolicy)
-        let classifiedActivity = teamsMicrophoneActivityClassifier.classify(signals)
+        let classifiedActivity = notificationAudioClassifier.classify(signals)
         if classifiedActivity.detectedNotification, notificationFlashesEnabled {
             notifications.append(DeskNotification(
                 title: "Teams notification",

@@ -5,12 +5,127 @@ import CoreGraphics
 import Foundation
 
 struct TeamsProcessPresenceProvider: PresenceProvider {
+    private static let bundleIdentifierPrefixes = [
+        "com.microsoft.teams",
+        "com.microsoft.teams2"
+    ]
+
     let name = "Teams process"
+
+    static func matches(bundleIdentifier: String) -> Bool {
+        let identifier = bundleIdentifier.lowercased()
+        return bundleIdentifierPrefixes.contains {
+            identifier == $0 || identifier.hasPrefix("\($0).")
+        }
+    }
+
     func sample() -> PresenceSignal {
         let running = NSWorkspace.shared.runningApplications.contains { app in
-            app.bundleIdentifier == "com.microsoft.teams" || app.localizedName?.localizedCaseInsensitiveContains("teams") == true
+            app.bundleIdentifier.map(Self.matches) == true
+                || app.localizedName?.localizedCaseInsensitiveContains("teams") == true
         }
         return PresenceSignal(provider: name, state: running ? .available : .unknown, detail: running ? "running" : "not running")
+    }
+}
+
+struct AudioProcessActivity: Equatable, Sendable {
+    let bundleIdentifier: String
+    let isRunningInput: Bool
+    let isRunningOutput: Bool
+}
+
+struct AudioProcessActivitySummary: Equatable, Sendable {
+    let teamsInputActive: Bool
+    let anyInputActive: Bool
+    let notificationOutputActive: Bool
+
+    init(activities: [AudioProcessActivity]) {
+        teamsInputActive = activities.contains {
+            $0.isRunningInput && TeamsProcessPresenceProvider.matches(bundleIdentifier: $0.bundleIdentifier)
+        }
+        anyInputActive = activities.contains(where: \.isRunningInput)
+        notificationOutputActive = activities.contains {
+            guard $0.isRunningOutput else { return false }
+            let identifier = $0.bundleIdentifier.lowercased()
+            return identifier == "systemsoundserverd"
+                || identifier == "com.apple.systemsoundserverd"
+                || TeamsProcessPresenceProvider.matches(bundleIdentifier: identifier)
+        }
+    }
+}
+
+/// Uses the macOS process-level HAL properties when available. Unlike device
+/// state, these distinguish microphone capture from playback on duplex devices.
+struct CoreAudioProcessActivityProvider: Sendable {
+    func sample() -> AudioProcessActivitySummary? {
+        guard let activities = processActivities() else { return nil }
+        return AudioProcessActivitySummary(activities: activities)
+    }
+
+    private func processActivities() -> [AudioProcessActivity]? {
+        let system = AudioObjectID(kAudioObjectSystemObject)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyProcessObjectList,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        guard AudioObjectHasProperty(system, &address) else { return nil }
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(system, &address, 0, nil, &size) == noErr else { return nil }
+        if size == 0 { return [] }
+        var objects = Array(
+            repeating: AudioObjectID(),
+            count: Int(size) / MemoryLayout<AudioObjectID>.size
+        )
+        guard AudioObjectGetPropertyData(system, &address, 0, nil, &size, &objects) == noErr else { return nil }
+        return objects.compactMap(activity)
+    }
+
+    private func activity(for process: AudioObjectID) -> AudioProcessActivity? {
+        guard let isRunningInput = boolProperty(kAudioProcessPropertyIsRunningInput, process: process),
+              let isRunningOutput = boolProperty(kAudioProcessPropertyIsRunningOutput, process: process),
+              isRunningInput || isRunningOutput else {
+            return nil
+        }
+        return AudioProcessActivity(
+            bundleIdentifier: bundleIdentifier(process: process) ?? "",
+            isRunningInput: isRunningInput,
+            isRunningOutput: isRunningOutput
+        )
+    }
+
+    private func boolProperty(
+        _ selector: AudioObjectPropertySelector,
+        process: AudioObjectID
+    ) -> Bool? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: selector,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        guard AudioObjectHasProperty(process, &address) else { return nil }
+        var value: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        guard AudioObjectGetPropertyData(process, &address, 0, nil, &size, &value) == noErr else {
+            return nil
+        }
+        return value != 0
+    }
+
+    private func bundleIdentifier(process: AudioObjectID) -> String? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioProcessPropertyBundleID,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var value: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        guard AudioObjectGetPropertyData(process, &address, 0, nil, &size, &value) == noErr,
+              let value else {
+            return nil
+        }
+        let identifier = value.takeRetainedValue() as String
+        return identifier.isEmpty ? nil : identifier
     }
 }
 
@@ -113,18 +228,33 @@ struct LocalPresencePolicy: Codable, Sendable, Equatable {
     }
 }
 
-/// Combines public local signals. Teams + active mic is intentionally an inference, not app-level microphone attribution.
+/// Combines public local signals without opening or capturing media devices.
 struct LocalPresenceSampler: Sendable {
     static let teamsMicrophoneProvider = "Teams + microphone"
+    static let notificationAudioProvider = "Notification audio"
+    static let notificationAudioActiveDetail = "active"
+    static let notificationAudioInactiveDetail = "inactive"
 
     private let teams = TeamsProcessPresenceProvider()
+    private let processAudio = CoreAudioProcessActivityProvider()
     private let microphone = MicrophonePresenceProvider()
     private let camera = CameraPresenceProvider()
     private let idle = IdlePresenceProvider()
     func sample(policy: LocalPresencePolicy = .init()) -> [PresenceSignal] {
-        let teamSignal = teams.sample(); let micSignal = microphone.sample(); let cameraSignal = camera.sample()
+        let teamSignal = teams.sample()
+        let processAudioSummary = processAudio.sample()
+        let cameraSignal = camera.sample()
         let teamsRunning = teamSignal.detail == "running"
         var result = [teamSignal]
+        if let processAudioSummary {
+            result.append(PresenceSignal(
+                provider: Self.notificationAudioProvider,
+                state: .unknown,
+                detail: processAudioSummary.notificationOutputActive
+                    ? Self.notificationAudioActiveDetail
+                    : Self.notificationAudioInactiveDetail
+            ))
+        }
         if policy.useCamera {
             let cameraState = policy.attributedActivityState(isActive: cameraSignal.state == .busy, teamsRunning: teamsRunning, state: .busy)
             if cameraState == .busy {
@@ -137,6 +267,30 @@ struct LocalPresenceSampler: Sendable {
         }
         if policy.useIdleTime { result.append(idle.sample()) }
         if policy.useMicrophone {
+            if let processAudioSummary {
+                if processAudioSummary.teamsInputActive {
+                    result.append(PresenceSignal(
+                        provider: Self.teamsMicrophoneProvider,
+                        state: .inCall,
+                        detail: "Teams input active"
+                    ))
+                } else if !policy.requireTeamsForCallActivity && processAudioSummary.anyInputActive {
+                    result.append(PresenceSignal(
+                        provider: "Microphone activity",
+                        state: .busy,
+                        detail: "non-Teams input active"
+                    ))
+                } else {
+                    result.append(PresenceSignal(
+                        provider: "Microphone activity",
+                        state: .unknown,
+                        detail: "no attributed active input"
+                    ))
+                }
+                return result
+            }
+
+            let micSignal = microphone.sample()
             let micState = policy.attributedActivityState(
                 isActive: micSignal.state == .busy,
                 teamsRunning: teamsRunning,

@@ -63,7 +63,7 @@ struct SettingsView: View {
                 Picker("Change Delay", selection: $controller.automaticTransitionDelay) {
                     Text("No Delay").tag(0.0); Text("10 Seconds").tag(10.0); Text("30 Seconds").tag(30.0)
                 }
-                Text("Teams microphone activity must remain active for two seconds before it is treated as a call. Shorter pulses are treated as notification alerts.")
+                Text("Teams microphone capture is distinguished from browser and music playback. Brief system notification sounds can trigger the white notification flash.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Behavior") {
