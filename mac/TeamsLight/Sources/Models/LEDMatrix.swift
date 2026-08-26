@@ -9,6 +9,7 @@ struct LEDColor: Codable, Equatable, Hashable, Sendable {
     let blue: UInt8
     
     static let black = LEDColor(red: 0, green: 0, blue: 0)
+    static let white = LEDColor(red: 255, green: 255, blue: 255)
     
     var hexValue: String {
         String(format: "%02X%02X%02X", red, green, blue)

@@ -71,6 +71,7 @@ struct SettingsView: View {
                 Picker("Return to Auto", selection: $controller.manualOverrideTimeout) {
                     Text("Never").tag(0.0); Text("After 15 Minutes").tag(900.0); Text("After 30 Minutes").tag(1800.0); Text("After 1 Hour").tag(3600.0)
                 }
+                Toggle("Flash white for notifications", isOn: $controller.notificationFlashesEnabled)
                 Toggle("Start at Login", isOn: $controller.startAtLogin)
             }
             Section("Desk Display") {
@@ -137,7 +138,7 @@ struct SettingsView: View {
             Section("Backup") {
                 Button("Export Full Settings Backup…") { exportBackup() }
                 Button("Import Full Settings Backup…") { importBackup() }
-                Text("Includes scenes, presets, scene controls, rules, appearance profiles, matrix frame, calibration, detection policy, and safety settings.")
+                Text("Includes scenes, presets, scene controls, rules, appearance profiles, notification flashes, matrix frame, calibration, detection policy, and safety settings.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("What’s New") {

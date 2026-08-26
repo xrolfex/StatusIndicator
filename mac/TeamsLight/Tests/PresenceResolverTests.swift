@@ -194,6 +194,16 @@ final class PresenceResolverTests: XCTestCase {
             XCTAssertEqual(frame.pixels.count, geometry.pixelCount)
         }
     }
+    func testNotificationFlashAlternatesBetweenWhiteAndOff() {
+        let geometry = MatrixGeometry(width: 3, height: 2)
+        let lit = MatrixAnimation.blink.frame(geometry: geometry, color: .white, progress: 0.25)
+        let off = MatrixAnimation.blink.frame(geometry: geometry, color: .white, progress: 0.75)
+
+        XCTAssertEqual(DisplayScene.notificationFlash.animation, .blink)
+        XCTAssertEqual(DisplayScene.notificationFlash.color, .white)
+        XCTAssertEqual(Set(lit.pixels), [.white])
+        XCTAssertEqual(Set(off.pixels), [.black])
+    }
     func testScrollingSceneAdvancesInsteadOfRestartingEveryFrame() {
         let scene = DisplayScene(name: "Message", animation: .scrollText, color: LEDColor(red: 255, green: 255, blue: 255), text: "HELLO", framesPerSecond: 8)
         let start = Date(timeIntervalSinceReferenceDate: 0)

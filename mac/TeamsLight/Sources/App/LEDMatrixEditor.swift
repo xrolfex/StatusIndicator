@@ -41,11 +41,10 @@ struct DeskDisplayView: View {
                     }
                     HStack {
                         Button("Return to Presence") { controller.stopScene() }
-                        Button("Test Alert") {
-                            if let alert = DisplayScene.builtIns.first(where: { $0.name == "Incoming Alert" }) {
-                                controller.enqueueNotification(title: "Test notification", scene: alert)
-                            }
+                        Button("Test Notification Flash") {
+                            controller.enqueueNotification(title: "Test notification")
                         }
+                        .disabled(!controller.notificationFlashesEnabled)
                         Button("Import Scene Pack…") { importScenePack() }
                         Button("Export Scene Pack…") { exportScenePack() }
                     }

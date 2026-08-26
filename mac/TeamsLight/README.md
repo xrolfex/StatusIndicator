@@ -6,7 +6,7 @@ Run `scripts/package-app.sh` to create `.build/TeamsLight.xcarchive` and copy it
 
 The app uses `SMAppService.mainApp` for the optional Start at Login switch. It emits privacy-safe lifecycle events to the unified log under subsystem `com.example.TeamsLight`; inspect with Console or `log show --predicate 'subsystem == "com.example.TeamsLight"'`.
 
-Preferences persist across relaunches: chosen output, brightness, manual presence selection, custom color, matrix frame, and automatic-detection policy. Under **Automatic Detection**, microphone, camera, and idle-time signals can be enabled independently. The default requires Teams to be running before microphone or camera activity can drive a call-related state, avoiding false Busy indicators from unrelated meeting apps. Turning that requirement off intentionally treats activity from any app as Busy.
+Preferences persist across relaunches: chosen output, brightness, manual presence selection, custom color, matrix frame, notification flashes, and automatic-detection policy. Under **Automatic Detection**, microphone, camera, and idle-time signals can be enabled independently. The default requires Teams to be running before microphone or camera activity can drive a call-related state, avoiding false Busy indicators from unrelated meeting apps. Turning that requirement off intentionally treats activity from any app as Busy.
 
 Automatic presence changes default to a 10-second stability window, avoiding momentary microphone/camera activity flickering the indicator. Choose **No Delay**, **10 Seconds**, or **30 Seconds** from Automatic Detection; manual selections always apply immediately. **When Locked or Asleep** can retain the current light, show Away, or turn all selected outputs off, and resumes normal indication on unlock or wake.
 
@@ -25,6 +25,8 @@ Use **Export** to save personal presets as JSON and **Import** to merge a JSON b
 The Settings window includes **State Appearance** profiles. Each state can use independent ESP32 and Busylight colors and brightness multipliers; Reset restores the original status-light behavior. A customized Presenting profile uses a fixed color, while the default continues to pulse on the ESP32.
 
 **Import Image** converts a selected local image to the matrix's 8×8 RGB frame and shows it immediately. Choose **Fit** to preserve the full image with black letterboxing, or **Crop to Fill** to use the entire matrix. Save the result as a personal preset if you want to reuse it.
+
+Incoming Desk Display notifications briefly blink white on the active ESP32 and Busylight outputs. Turn off **Flash white for notifications** under **Behavior** to keep the current display unchanged when notifications arrive.
 
 **Desk Display** is the animation and automation workspace. It includes pulse, rainbow, scanner, sparkle, countdown, scrolling-text, audio-meter, and screen-ambient scenes; custom scenes are local and reusable. Import an animated GIF to convert up to 120 frames to the current matrix geometry. Rules can show scenes automatically for presence, active microphone, or a calendar event beginning within ten minutes. Calendar access is off by default and is only requested after enabling it in Settings; audio access is also opt-in and processed locally without recording.
 

@@ -87,6 +87,7 @@ The menu-bar popover includes:
 - A settings menu for choosing **ESP32**, **Busylight**, or **Both**.
 - Diagnostics for connected outputs and local presence signals.
 - Optional Start at Login.
+- Brief white notification flashes, with a persisted setting to disable them.
 - An **LED Matrix Editor** for selecting each ESP32 NeoPixel and assigning its RGB color.
 - A hidden-style **5/3 Matrix Mode**, available when ESP32 output is selected. It displays a low-brightness, 180°-oriented 5/3 mark on the matrix while all other LEDs remain off. Turning it off restores ordinary presence indication.
 

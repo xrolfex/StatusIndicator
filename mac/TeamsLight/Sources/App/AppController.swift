@@ -31,6 +31,7 @@ final class AppController: ObservableObject {
         static let scenePriority = "deskDisplay.scenePriority"
         static let audioReactive = "deskDisplay.audioReactive"
         static let calendarIntegration = "deskDisplay.calendarIntegration"
+        static let notificationFlashes = "deskDisplay.notificationFlashes"
     }
     private let defaults = UserDefaults.standard
     @Published var state: PresenceState = .unknown
@@ -88,6 +89,7 @@ final class AppController: ObservableObject {
     @Published var sceneRules: [SceneRule] = [] { didSet { persistSceneRules(); tick() } }
     @Published var audioReactiveEnabled = false { didSet { defaults.set(audioReactiveEnabled, forKey: DefaultsKey.audioReactive); audioReactiveEnabled ? audioMeter.start() : audioMeter.stop() } }
     @Published var calendarIntegrationEnabled = false { didSet { defaults.set(calendarIntegrationEnabled, forKey: DefaultsKey.calendarIntegration); if calendarIntegrationEnabled { calendarMonitor.refreshIfNeeded() } else { calendarMonitor.clear() }; tick() } }
+    @Published var notificationFlashesEnabled = true { didSet { defaults.set(notificationFlashesEnabled, forKey: DefaultsKey.notificationFlashes); tick() } }
     let transport = USBSerialTransport()
     private let busylight = KuandoBusylightTransport()
     private let sampler = LocalPresenceSampler(); private let resolver = PresenceResolver()
@@ -146,6 +148,7 @@ final class AppController: ObservableObject {
         if let raw = defaults.string(forKey: DefaultsKey.scenePriority), let restored = ScenePriority(rawValue: raw) { scenePriority = restored }
         audioReactiveEnabled = defaults.object(forKey: DefaultsKey.audioReactive) as? Bool ?? false
         calendarIntegrationEnabled = defaults.object(forKey: DefaultsKey.calendarIntegration) as? Bool ?? false
+        notificationFlashesEnabled = defaults.object(forKey: DefaultsKey.notificationFlashes) as? Bool ?? true
         transitionFilter.delay = automaticTransitionDelay
         startAtLogin = SMAppService.mainApp.status == .enabled
         tick()
@@ -174,20 +177,24 @@ final class AppController: ObservableObject {
         let ruleScene = sceneRules.first(where: { $0.isEnabled && $0.condition.matches(state: next, signals: signals, upcomingMeeting: calendarIntegrationEnabled && calendarMonitor.hasUpcomingMeeting) }).flatMap { rule in
             allScenes.first { $0.id == rule.sceneID }.map(configuredScene)
         }
-        let selected = switch scenePriority {
-        case .notificationsFirst: (notifications.last?.scene, "Notification", activeScene, ruleScene)
-        case .manualFirst: (activeScene, "Manual scene", notifications.last?.scene, ruleScene)
-        case .automationFirst: (ruleScene, "Automation rule", notifications.last?.scene, activeScene)
+        let notificationScene = notificationFlashesEnabled ? notifications.last?.scene : nil
+        let candidates: [(scene: DisplayScene?, owner: String)] = switch scenePriority {
+        case .notificationsFirst: [(notificationScene, "Notification"), (activeScene, "Manual scene"), (ruleScene, "Automation rule")]
+        case .manualFirst: [(activeScene, "Manual scene"), (notificationScene, "Notification"), (ruleScene, "Automation rule")]
+        case .automationFirst: [(ruleScene, "Automation rule"), (notificationScene, "Notification"), (activeScene, "Manual scene")]
         }
-        let displayedScene = selected.0 ?? selected.2 ?? selected.3
-        displayOwner = displayedScene == nil ? (isMatrixOverride ? "Matrix editor" : isCustomColorOverride ? "Custom color" : "Presence") : (selected.0 != nil ? selected.1 : selected.2?.id == notifications.last?.scene.id ? "Notification" : selected.2?.id == activeScene?.id ? "Manual scene" : "Automation rule")
+        let selected = candidates.first { $0.scene != nil }
+        let displayedScene = selected?.scene
+        displayOwner = selected?.owner ?? (isMatrixOverride ? "Matrix editor" : isCustomColorOverride ? "Custom color" : "Presence")
+        let displayedSceneFrame = displayedScene.map(sceneFrame)
+        let notificationFlashIsDisplayed = !isInactiveDisplay && selected?.owner == "Notification"
         let profile = appearanceProfile(for: displayState)
         let retainsInactiveDisplay = isInactiveDisplay && inactiveDisplayBehavior == .retain
         let command: USBCommand
         if isInactiveDisplay {
             command = .presence(displayState)
-        } else if let displayedScene {
-            command = .matrix(sceneFrame(for: displayedScene))
+        } else if let displayedSceneFrame {
+            command = .matrix(displayedSceneFrame)
         } else if isMatrixOverride {
             command = .matrix(matrix)
         } else if isFiveThirdMode {
@@ -213,6 +220,9 @@ final class AppController: ObservableObject {
                 // Ensure the special mark is rendered at its lowest visible brightness.
                 let brightnessLevel: Int
                 if isFiveThirdMode { brightnessLevel = 1 }
+                else if notificationFlashIsDisplayed {
+                    brightnessLevel = Int((brightnessPercent * 15 / 100).rounded())
+                }
                 else {
                     let multiplier = hasCustomAppearance(for: displayState) ? profile.esp32Brightness : 100
                     brightnessLevel = Int((brightnessPercent * multiplier * 15 / 10_000).rounded())
@@ -229,6 +239,13 @@ final class AppController: ObservableObject {
             if !retainsInactiveDisplay && destination.usesBusylight && busylight.isConnected {
                 if isInactiveDisplay {
                     await busylight.send(displayState, brightnessPercent: brightnessPercent)
+                } else if notificationFlashIsDisplayed, let flashColor = displayedSceneFrame?.pixels.first {
+                    await busylight.send(
+                        red: flashColor.red,
+                        green: flashColor.green,
+                        blue: flashColor.blue,
+                        brightnessPercent: brightnessPercent
+                    )
                 } else if isMatrixOverride || isFiveThirdMode {
                     // Matrix-specific displays have no Busylight equivalent;
                     // keep the secondary device dark rather than showing stale presence.
@@ -405,8 +422,8 @@ final class AppController: ObservableObject {
         activeScene = configuredScene(scene); tick()
     }
     func stopScene() { activeScene = nil; tick() }
-    func enqueueNotification(title: String, scene: DisplayScene, duration: Double = 8) {
-        notifications.append(DeskNotification(title: title, scene: scene, expiresAt: .now.addingTimeInterval(max(1, duration))))
+    func enqueueNotification(title: String, duration: Double = 3) {
+        notifications.append(DeskNotification(title: title, scene: .notificationFlash, expiresAt: .now.addingTimeInterval(max(1, duration))))
         tick()
     }
     func previewFrame(for scene: DisplayScene, at date: Date) -> LEDMatrix {
@@ -593,7 +610,7 @@ final class AppController: ObservableObject {
         defaults.set(data, forKey: DefaultsKey.sceneSafety)
     }
     func exportBackup(to url: URL) throws {
-        let backup = TeamsLightBackup(formatVersion: 1, brightness: brightnessPercent, matrixPayload: matrix.hexPayload, scenes: customScenes, rules: sceneRules, sceneOptions: sceneOptions, appearanceProfiles: appearanceProfiles, presencePolicy: presencePolicy, safetyLimits: sceneSafetyLimits, scenePriority: scenePriority, matrixPresets: MatrixPresetStore.backupData(), calibrationRotation: calibrationRotation, calibrationSerpentine: calibrationSerpentine)
+        let backup = TeamsLightBackup(formatVersion: 1, brightness: brightnessPercent, matrixPayload: matrix.hexPayload, scenes: customScenes, rules: sceneRules, sceneOptions: sceneOptions, appearanceProfiles: appearanceProfiles, presencePolicy: presencePolicy, safetyLimits: sceneSafetyLimits, scenePriority: scenePriority, matrixPresets: MatrixPresetStore.backupData(), calibrationRotation: calibrationRotation, calibrationSerpentine: calibrationSerpentine, notificationFlashesEnabled: notificationFlashesEnabled)
         try JSONEncoder().encode(backup).write(to: url, options: .atomic)
     }
     @discardableResult
@@ -602,6 +619,7 @@ final class AppController: ObservableObject {
         brightnessPercent = backup.brightness
         customScenes = backup.scenes; sceneRules = backup.rules; sceneOptions = backup.sceneOptions
         appearanceProfiles = backup.appearanceProfiles; presencePolicy = backup.presencePolicy; sceneSafetyLimits = backup.safetyLimits; scenePriority = backup.scenePriority
+        if let notificationFlashesEnabled = backup.notificationFlashesEnabled { self.notificationFlashesEnabled = notificationFlashesEnabled }
         if let presets = backup.matrixPresets { MatrixPresetStore.restoreBackupData(presets) }
         setMatrixCalibration(rotation: backup.calibrationRotation, serpentine: backup.calibrationSerpentine)
         if let restored = LEDMatrix(hexPayload: backup.matrixPayload) { applyMatrix(restored) }
@@ -615,7 +633,7 @@ final class AppController: ObservableObject {
     }
     
     var displayTitle: String {
-        if let notification = notifications.last { return notification.title }
+        if displayOwner == "Notification", let notification = notifications.last { return notification.title }
         if let activeScene { return activeScene.name }
         if isMatrixOverride { return "Custom Matrix" }
         if isFiveThirdMode { return "5/3 Matrix" }

@@ -1,7 +1,7 @@
 import Foundation
 
 enum MatrixAnimation: String, CaseIterable, Codable, Identifiable, Sendable {
-    case solid, pulse, rainbow, scanner, sparkle, equalizer, countdown, scrollText, screenAmbient
+    case solid, pulse, blink, rainbow, scanner, sparkle, equalizer, countdown, scrollText, screenAmbient
 
     var id: Self { self }
     var title: String { rawValue.replacingOccurrences(of: "([a-z])([A-Z])", with: "$1 $2", options: .regularExpression).capitalized }
@@ -19,6 +19,8 @@ enum MatrixAnimation: String, CaseIterable, Codable, Identifiable, Sendable {
                     let minimum = (options?.pulseMinimum ?? 15) / 100
                     let level = minimum + (1 - minimum) * (sin(phase * .pi * 2) + 1) / 2
                     matrix[coordinate] = color.scaled(by: level)
+                case .blink:
+                    matrix[coordinate] = phase < 0.5 ? color : .black
                 case .rainbow:
                     matrix[coordinate] = .hsv(hue: Double(column) / Double(max(1, geometry.width)) + phase, saturation: 0.9, value: 1)
                 case .scanner:
@@ -87,6 +89,7 @@ struct DisplayScene: Identifiable, Codable, Equatable, Sendable {
             duration = max(2.5, Double(max(1, text.count)) * 0.5 / speed)
         case .rainbow: duration = 4 / speed
         case .pulse: duration = 1.8 / speed
+        case .blink: duration = 2 / min(6, max(1, framesPerSecond))
         case .scanner: duration = 1 / speed
         case .sparkle: duration = 0.7 / speed
         case .equalizer: duration = 0.25 / speed
@@ -96,10 +99,17 @@ struct DisplayScene: Identifiable, Codable, Equatable, Sendable {
         return animation.frame(geometry: geometry, color: color, progress: now.timeIntervalSinceReferenceDate / duration, text: text, audioLevel: audioLevel, options: tuning)
     }
 
+    static let notificationFlash = DisplayScene(
+        name: "Incoming Alert",
+        animation: .blink,
+        color: .white,
+        framesPerSecond: 4
+    )
+
     static let builtIns = [
         DisplayScene(name: "Focus Pulse", animation: .pulse, color: .init(red: 0, green: 120, blue: 255)),
         DisplayScene(name: "Rainbow", animation: .rainbow, color: .black, framesPerSecond: 8),
-        DisplayScene(name: "Incoming Alert", animation: .scanner, color: .init(red: 255, green: 100, blue: 0), framesPerSecond: 10),
+        notificationFlash,
         DisplayScene(name: "Audio Meter", animation: .equalizer, color: .init(red: 0, green: 255, blue: 110), framesPerSecond: 10),
         DisplayScene(name: "Desk Message", animation: .scrollText, color: .init(red: 255, green: 255, blue: 255), text: "HELLO", framesPerSecond: 8),
         DisplayScene(name: "Screen Ambient", animation: .screenAmbient, color: .init(red: 100, green: 150, blue: 255), framesPerSecond: 1)
@@ -211,6 +221,7 @@ struct TeamsLightBackup: Codable, Sendable {
     let matrixPresets: Data?
     let calibrationRotation: Int
     let calibrationSerpentine: Bool
+    let notificationFlashesEnabled: Bool?
 }
 
 private enum PixelText {
