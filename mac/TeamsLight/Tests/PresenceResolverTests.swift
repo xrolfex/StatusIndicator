@@ -297,6 +297,17 @@ final class PresenceResolverTests: XCTestCase {
         let later = scene.frame(geometry: .legacy, now: start.addingTimeInterval(1))
         XCTAssertNotEqual(first, later)
     }
+    func testScrollingTextRendersStraightAndCurlyApostrophes() {
+        let color = LEDColor(red: 255, green: 255, blue: 255)
+        let straight = MatrixAnimation.scrollText.frame(geometry: .legacy, color: color, progress: 0.45, text: "N'")
+        let curly = MatrixAnimation.scrollText.frame(geometry: .legacy, color: color, progress: 0.45, text: "N’")
+
+        // At this phase the message starts in the first display column. The
+        // apostrophe follows the five-column N, with its upper-right pixel at
+        // row 1, column 7 on an 8×8 panel.
+        XCTAssertEqual(straight[MatrixCoordinate(row: 1, column: 7)], color)
+        XCTAssertEqual(curly, straight)
+    }
     func testSceneOptionsRemainCompatibleWithOlderSavedOptions() throws {
         let legacy = """
         {"framesPerSecond":8,"color":{"red":1,"green":2,"blue":3},"text":"HELLO","intensity":75}

@@ -41,7 +41,7 @@ enum MatrixAnimation: String, CaseIterable, Codable, Identifiable, Sendable {
                     matrix[coordinate] = row * geometry.width + column < filled ? color : .black
                 case .scrollText:
                     let glyphs = PixelText.glyphs(for: text.isEmpty ? "TEAMSLIGHT" : text)
-                    let contentWidth = glyphs.count * 4 // 3 pixels plus a single spacer column
+                    let contentWidth = PixelText.contentWidth(of: glyphs)
                     let offset = Int(phase * Double(contentWidth + geometry.width)) - geometry.width
                     if PixelText.isLit(x: column + offset, y: row, glyphs: glyphs, displayHeight: geometry.height) {
                         matrix[coordinate] = color
@@ -232,21 +232,62 @@ private enum PixelText {
         "C": ["011","100","100","100","011"], "D": ["110","101","101","101","110"],
         "E": ["111","100","110","100","111"], "F": ["111","100","110","100","100"],
         "G": ["011","100","101","101","011"], "H": ["101","101","111","101","101"],
-        "I": ["111","010","010","010","111"], "L": ["100","100","100","100","111"],
-        "M": ["101","111","111","101","101"], "N": ["101","111","111","111","101"],
+        "I": ["111","010","010","010","111"], "J": ["001","001","001","101","010"],
+        "K": ["101","101","110","101","101"], "L": ["100","100","100","100","111"],
+        "M": ["101","111","111","101","101"],
+        // A five-column N keeps its diagonal recognizable on the 8×8 panel.
+        "N": ["10001","11001","10101","10011","10001"],
         "O": ["010","101","101","101","010"], "P": ["110","101","110","100","100"],
-        "R": ["110","101","110","101","101"], "S": ["011","100","010","001","110"],
+        "Q": ["010","101","101","011","001"], "R": ["110","101","110","101","101"],
+        "S": ["011","100","010","001","110"],
         "T": ["111","010","010","010","010"], "U": ["101","101","101","101","111"],
-        "Y": ["101","101","010","010","010"], " ": ["000","000","000","000","000"]
+        "V": ["101","101","101","101","010"], "W": ["101","101","111","111","101"],
+        "X": ["101","101","010","101","101"], "Y": ["101","101","010","010","010"],
+        "Z": ["111","001","010","100","111"],
+        "0": ["111","101","101","101","111"], "1": ["010","110","010","010","111"],
+        "2": ["110","001","010","100","111"], "3": ["110","001","010","001","110"],
+        "4": ["101","101","111","001","001"], "5": ["111","100","110","001","110"],
+        "6": ["011","100","110","101","010"], "7": ["111","001","010","010","010"],
+        "8": ["010","101","010","101","010"], "9": ["010","101","011","001","110"],
+        "'": ["010","010","000","000","000"], "\"": ["101","101","000","000","000"],
+        ".": ["000","000","000","000","010"], ",": ["000","000","000","010","100"],
+        "!": ["010","010","010","000","010"], "?": ["110","001","010","000","010"],
+        "-": ["000","000","111","000","000"], "_": ["000","000","000","000","111"],
+        "/": ["001","001","010","100","100"], ":": ["000","010","000","010","000"],
+        " ": ["000","000","000","000","000"]
     ]
-    static func glyphs(for text: String) -> [[String]] { text.uppercased().map { alphabet[$0] ?? alphabet[" "]! } }
+    static func glyphs(for text: String) -> [[String]] {
+        text.uppercased().map { character in
+            let normalized: Character
+            switch character {
+            case "’", "‘", "‛", "`": normalized = "'"
+            case "“", "”", "„": normalized = "\""
+            case "–", "—", "−": normalized = "-"
+            default: normalized = character
+            }
+            return alphabet[normalized] ?? alphabet[" "]!
+        }
+    }
+    static func contentWidth(of glyphs: [[String]]) -> Int {
+        glyphs.reduce(0) { $0 + glyphWidth(of: $1) + 1 }
+    }
     static func isLit(x: Int, y: Int, glyphs: [[String]], displayHeight: Int) -> Bool {
-        let glyphIndex = x / 4; let glyphX = x % 4
-        guard glyphIndex >= 0, glyphIndex < glyphs.count, glyphX >= 0, glyphX < 3 else { return false }
+        var glyphX = x
+        var glyph: [String]?
+        for candidate in glyphs {
+            let width = glyphWidth(of: candidate)
+            if glyphX >= 0, glyphX < width {
+                glyph = candidate
+                break
+            }
+            glyphX -= width + 1
+        }
+        guard let glyph else { return false }
         let glyphY = y - max(0, (displayHeight - 5) / 2)
         guard glyphY >= 0, glyphY < 5 else { return false }
-        return Array(glyphs[glyphIndex][glyphY])[glyphX] == "1"
+        return Array(glyph[glyphY])[glyphX] == "1"
     }
+    private static func glyphWidth(of glyph: [String]) -> Int { glyph.first?.count ?? 0 }
 }
 
 extension LEDColor {

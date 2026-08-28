@@ -1,6 +1,10 @@
 #include "serial_protocol.h"
 #include "presence_state.h"
+#if defined(ESP8266)
+#include <user_interface.h>
+#else
 #include <esp_system.h>
+#endif
 #include <cstdio>
 #include <cstring>
 
@@ -55,9 +59,14 @@ void SerialProtocol::handle(Stream& serial, char* line) {
   if (parsePresence(line, state)) { leds_.setState(state); serial.printf("OK %s\n", presenceName(state)); return; }
   if (!strcmp(line, "PING")) { reply(serial, "PONG"); return; }
   if (!strcmp(line, "INFO")) {
+#if defined(ESP8266)
+    const int resetReason = static_cast<int>(ESP.getResetInfoPtr()->reason);
+#else
+    const int resetReason = static_cast<int>(esp_reset_reason());
+#endif
     serial.printf("OK INFO TEAMSLIGHT_PROTOCOL 4 MATRIX WIDTH %d HEIGHT %d PIXELS %d ROTATION %u SERPENTINE %u UPTIME %lu HEAP %u RESET %d\n",
                   MATRIX_WIDTH, MATRIX_HEIGHT, LED_COUNT, leds_.rotation(), leds_.serpentine(),
-                  static_cast<unsigned long>(millis() / 1000), ESP.getFreeHeap(), static_cast<int>(esp_reset_reason()));
+                  static_cast<unsigned long>(millis() / 1000), ESP.getFreeHeap(), resetReason);
     return;
   }
   if (!strcmp(line, "STATUS")) { serial.printf("OK %s BRIGHTNESS %u\n", presenceName(leds_.state()), leds_.brightness()); return; }

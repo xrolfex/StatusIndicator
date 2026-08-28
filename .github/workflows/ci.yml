@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        environment: [waveshare_esp32_s3_matrix, esp32_wroom_32d_ws2812b_64]
+        environment: [waveshare_esp32_s3_matrix, esp32_wroom_32d_ws2812b_64, wemos_d1_mini_ws2812b_64]
     defaults:
       run:
         working-directory: firmware

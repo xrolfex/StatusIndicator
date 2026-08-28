@@ -1,10 +1,10 @@
 # Status Indicator
 
-A private, USB-only macOS status light for Microsoft Teams. It drives a Waveshare ESP32-S3-Matrix, an ESP32-WROOM-32D with an external WS2812B-64 matrix, a supported Kuando/Plenom Busylight, or an ESP32 and Busylight at the same time.
+A private, USB-only macOS status light for Microsoft Teams. It drives a Waveshare ESP32-S3-Matrix, an ESP32-WROOM-32D, or a Wemos D1 mini with an external WS2812B-64 matrix, a supported Kuando/Plenom Busylight, or an ESP32 and Busylight at the same time.
 
 The project contains two pieces:
 
-- `firmware/` — shared PlatformIO/Arduino firmware for the Waveshare ESP32-S3-Matrix and ESP32-WROOM-32D with an external 8×8 WS2812B matrix.
+- `firmware/` — shared PlatformIO/Arduino firmware for the Waveshare ESP32-S3-Matrix, ESP32-WROOM-32D, and Wemos D1 mini with an external 8×8 WS2812B matrix.
 - `mac/TeamsLight/` — a native macOS 13+ SwiftUI menu-bar app, with an Xcode project and tests. It controls the ESP32 over serial and Busylights over HID, without a vendor SDK or driver.
 
 For a step-by-step wiring and first-run verification guide, see
@@ -60,6 +60,19 @@ pio run -e esp32_wroom_32d_ws2812b_64 -t upload
 ```
 
 This target uses the common GRB, serpentine matrix layout. Its USB-to-UART bridge may appear as `cu.usbserial`, `cu.SLAB_USBtoUART`, or `cu.wchusbserial`; the Mac app recognizes and verifies each using the same serial protocol.
+
+### Wemos D1 mini (ESP8266) with WS2812B-64
+
+Use the same external matrix and power wiring as the WROOM target, with the matrix `DIN` connected through a 330–470 Ω resistor to the Wemos header pin labeled **D4** (GPIO 2). Keep the matrix on its own regulated 5 V supply and join that supply's ground to the Wemos ground. Since GPIO 2 is a boot-strapping pin, ensure the matrix data input does not pull it low during reset.
+
+Build and upload with:
+
+```sh
+cd firmware
+pio run -e wemos_d1_mini_ws2812b_64 -t upload
+```
+
+This target uses the WROOM's GRB, serpentine 8×8 mapping, so the same 64-pixel panel works without a matrix-layout change.
 
 ### Kuando / Plenom Busylight
 

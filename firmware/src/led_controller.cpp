@@ -1,9 +1,49 @@
 #include "led_controller.h"
 #include <algorithm>
+
+#if defined(ESP8266)
+#include <EEPROM.h>
+#else
 #include <Preferences.h>
+#endif
 
 namespace {
 constexpr uint8_t kMaxBrightness = 15; // Supply/thermal-safe default cap for this 64 LED board.
+#if defined(ESP8266)
+constexpr size_t kCalibrationStorageSize = 4;
+constexpr uint8_t kCalibrationMagic = 0x54;
+
+uint16_t rotationFromStorage(uint8_t value) {
+  return static_cast<uint16_t>(value) * 90;
+}
+
+uint8_t rotationForStorage(uint16_t rotation) {
+  return static_cast<uint8_t>(rotation / 90);
+}
+
+void loadCalibration(uint16_t& rotation, bool& serpentine) {
+  EEPROM.begin(kCalibrationStorageSize);
+  if (EEPROM.read(0) == kCalibrationMagic) {
+    rotation = rotationFromStorage(EEPROM.read(1));
+    serpentine = EEPROM.read(2) != 0;
+  }
+}
+
+void saveCalibration(uint16_t rotation, bool serpentine) {
+  EEPROM.begin(kCalibrationStorageSize);
+  EEPROM.write(0, kCalibrationMagic);
+  EEPROM.write(1, rotationForStorage(rotation));
+  EEPROM.write(2, serpentine ? 1 : 0);
+  EEPROM.commit();
+}
+
+void clearCalibration() {
+  EEPROM.begin(kCalibrationStorageSize);
+  EEPROM.write(0, 0);
+  EEPROM.commit();
+}
+#endif
+
 uint8_t wave(uint32_t now, uint32_t periodMs, uint8_t low, uint8_t high) {
   const uint32_t phase = now % periodMs;
   const uint32_t half = periodMs / 2;
@@ -13,12 +53,16 @@ uint8_t wave(uint32_t now, uint32_t periodMs, uint8_t low, uint8_t high) {
 }
 
 void LedController::begin() {
+#if defined(ESP8266)
+  loadCalibration(rotation_, serpentine_);
+#else
   Preferences preferences;
   if (preferences.begin("teamslight", true)) {
     rotation_ = preferences.getUShort("rotation", MATRIX_ROTATION);
     serpentine_ = preferences.getBool("serpentine", MATRIX_SERPENTINE);
     preferences.end();
   }
+#endif
   // Never accept an invalid value from a corrupted or older NVS entry.
   if ((rotation_ != 0 && rotation_ != 90 && rotation_ != 180 && rotation_ != 270) ||
       ((rotation_ == 90 || rotation_ == 270) && MATRIX_WIDTH != MATRIX_HEIGHT)) {
@@ -55,24 +99,32 @@ bool LedController::setCalibration(uint16_t rotation, bool serpentine) {
   if ((rotation == 90 || rotation == 270) && MATRIX_WIDTH != MATRIX_HEIGHT) return false;
   rotation_ = rotation;
   serpentine_ = serpentine;
+#if defined(ESP8266)
+  saveCalibration(rotation_, serpentine_);
+#else
   Preferences preferences;
   if (preferences.begin("teamslight", false)) {
     preferences.putUShort("rotation", rotation_);
     preferences.putBool("serpentine", serpentine_);
     preferences.end();
   }
+#endif
   if (matrixMode_) renderMatrix(); else if (!diagnostic_) renderState(millis());
   return true;
 }
 void LedController::resetCalibration() {
   rotation_ = MATRIX_ROTATION;
   serpentine_ = MATRIX_SERPENTINE;
+#if defined(ESP8266)
+  clearCalibration();
+#else
   Preferences preferences;
   if (preferences.begin("teamslight", false)) {
     preferences.remove("rotation");
     preferences.remove("serpentine");
     preferences.end();
   }
+#endif
   if (matrixMode_) renderMatrix(); else if (!diagnostic_) renderState(millis());
 }
 void LedController::setState(PresenceState state) {

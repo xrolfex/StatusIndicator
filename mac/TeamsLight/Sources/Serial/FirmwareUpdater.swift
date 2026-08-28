@@ -44,6 +44,8 @@ struct BundledFirmwareImage: Sendable {
             return "waveshare_esp32_s3_matrix"
         case "ESP32_WROOM_32D_WS2812B_64":
             return "esp32_wroom_32d_ws2812b_64"
+        case "WEMOS_D1_MINI_WS2812B_64":
+            return "wemos_d1_mini_ws2812b_64"
         default:
             return nil
         }
