@@ -308,6 +308,23 @@ final class PresenceResolverTests: XCTestCase {
         XCTAssertEqual(straight[MatrixCoordinate(row: 1, column: 7)], color)
         XCTAssertEqual(curly, straight)
     }
+    func testScrollingTextSupportsEveryEnglishKeyboardCharacter() throws {
+        let unshifted = "`1234567890-=qwertyuiop[]\\asdfghjkl;'zxcvbnm,./ "
+        let shifted = "~!@#$%^&*()_+QWERTYUIOP{}|ASDFGHJKL:\"ZXCVBNM<>?"
+        let keyboardCharacters = unshifted + shifted
+
+        XCTAssertEqual(Set(keyboardCharacters).count, 95)
+        for character in keyboardCharacters {
+            let glyph = try XCTUnwrap(PixelText.glyph(for: character), "Missing glyph for \(character)")
+            XCTAssertEqual(glyph.count, 5, "Invalid glyph height for \(character)")
+            XCTAssertEqual(Set(glyph.map(\.count)).count, 1, "Inconsistent glyph width for \(character)")
+            XCTAssertTrue(glyph.joined().allSatisfy { $0 == "0" || $0 == "1" }, "Invalid pixels for \(character)")
+            if character != " " {
+                XCTAssertTrue(glyph.joined().contains("1"), "Blank glyph for \(character)")
+            }
+        }
+        XCTAssertNotEqual(PixelText.glyph(for: "`"), PixelText.glyph(for: "'"))
+    }
     func testSceneOptionsRemainCompatibleWithOlderSavedOptions() throws {
         let legacy = """
         {"framesPerSecond":8,"color":{"red":1,"green":2,"blue":3},"text":"HELLO","intensity":75}

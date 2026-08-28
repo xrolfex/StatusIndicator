@@ -160,7 +160,7 @@ struct DeskDisplayView: View {
         case .rainbow: return "Speed controls the colour cycle; hue and saturation are intentionally automatic."
         case .screenAmbient: return "Intensity scales the sampled screen colours; color is not used."
         case .equalizer: return "Use live microphone level in Settings for a responsive meter; speed is the fallback animation rate."
-        case .scrollText: return "Message, color, intensity, and marquee speed are all live."
+        case .scrollText: return "All standard US English keyboard characters are supported. Message, color, intensity, and marquee speed are all live."
         default: return "Changes are saved locally and apply immediately when this scene is showing."
         }
     }

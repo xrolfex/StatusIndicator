@@ -224,10 +224,10 @@ struct TeamsLightBackup: Codable, Sendable {
     let notificationFlashesEnabled: Bool?
 }
 
-private enum PixelText {
-    // A deliberately compact 3×5 alphabet: useful on very small displays and
-    // gracefully scales to larger dynamically discovered matrices.
-    static let alphabet: [Character: [String]] = [
+enum PixelText {
+    // A deliberately compact 3x5 font, with five-column glyphs where symbols
+    // need more detail. Lowercase letters reuse uppercase glyphs for clarity.
+    private static let font: [Character: [String]] = [
         "A": ["010","101","111","101","101"], "B": ["110","101","110","101","110"],
         "C": ["011","100","100","100","011"], "D": ["110","101","101","101","110"],
         "E": ["111","100","110","100","111"], "F": ["111","100","110","100","100"],
@@ -249,24 +249,39 @@ private enum PixelText {
         "4": ["101","101","111","001","001"], "5": ["111","100","110","001","110"],
         "6": ["011","100","110","101","010"], "7": ["111","001","010","010","010"],
         "8": ["010","101","010","101","010"], "9": ["010","101","011","001","110"],
-        "'": ["010","010","000","000","000"], "\"": ["101","101","000","000","000"],
-        ".": ["000","000","000","000","010"], ",": ["000","000","000","010","100"],
-        "!": ["010","010","010","000","010"], "?": ["110","001","010","000","010"],
-        "-": ["000","000","111","000","000"], "_": ["000","000","000","000","111"],
-        "/": ["001","001","010","100","100"], ":": ["000","010","000","010","000"],
-        " ": ["000","000","000","000","000"]
+        " ": ["000","000","000","000","000"], "!": ["010","010","010","000","010"],
+        "\"": ["101","101","000","000","000"], "#": ["01010","11111","01010","11111","01010"],
+        "$": ["01110","10100","01110","00101","01110"], "%": ["11001","11010","00100","01011","10011"],
+        "&": ["01100","10010","01100","10101","01010"], "'": ["010","010","000","000","000"],
+        "(": ["010","100","100","100","010"], ")": ["010","001","001","001","010"],
+        "*": ["00000","10101","01110","10101","00000"], "+": ["000","010","111","010","000"],
+        ",": ["000","000","000","010","100"], "-": ["000","000","111","000","000"],
+        ".": ["000","000","000","000","010"], "/": ["001","001","010","100","100"],
+        ":": ["000","010","000","010","000"], ";": ["000","010","000","010","100"],
+        "<": ["001","010","100","010","001"], "=": ["000","111","000","111","000"],
+        ">": ["100","010","001","010","100"], "?": ["110","001","010","000","010"],
+        "@": ["01110","10001","10111","10101","01111"], "[": ["110","100","100","100","110"],
+        "\\": ["100","100","010","001","001"], "]": ["011","001","001","001","011"],
+        "^": ["010","101","000","000","000"], "_": ["000","000","000","000","111"],
+        "`": ["100","010","000","000","000"], "{": ["011","010","110","010","011"],
+        "|": ["010","010","010","010","010"], "}": ["110","010","011","010","110"],
+        "~": ["00000","01010","10100","00000","00000"]
     ]
-    static func glyphs(for text: String) -> [[String]] {
-        text.uppercased().map { character in
-            let normalized: Character
-            switch character {
-            case "’", "‘", "‛", "`": normalized = "'"
-            case "“", "”", "„": normalized = "\""
-            case "–", "—", "−": normalized = "-"
-            default: normalized = character
-            }
-            return alphabet[normalized] ?? alphabet[" "]!
+    static func glyph(for character: Character) -> [String]? {
+        let normalized: Character
+        switch character {
+        case "’", "‘", "‛": normalized = "'"
+        case "“", "”", "„": normalized = "\""
+        case "–", "—", "−": normalized = "-"
+        default: normalized = character
         }
+        if let glyph = font[normalized] { return glyph }
+        let uppercase = String(normalized).uppercased()
+        guard uppercase.count == 1, let uppercaseCharacter = uppercase.first else { return nil }
+        return font[uppercaseCharacter]
+    }
+    static func glyphs(for text: String) -> [[String]] {
+        text.map { glyph(for: $0) ?? font[" "]! }
     }
     static func contentWidth(of glyphs: [[String]]) -> Int {
         glyphs.reduce(0) { $0 + glyphWidth(of: $1) + 1 }
